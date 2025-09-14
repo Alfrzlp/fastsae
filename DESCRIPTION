@@ -1,0 +1,24 @@
+Package: fastsae
+Type: Package
+Title: Fast Implementation of Small Area Estimation Methods
+Version: 0.1.0
+Authors@R: c(
+      person("Ridson", "Al Farizal P", role = c("aut", "cre","cph"), email = "alfrzlp@gmail.com", comment = c(ORCID = "0000-0003-0617-0214")),
+      person("Azka", "Ubaidillah", role = "aut", email = "azka@stis.ac.id", comment = c(ORCID = "0000-0002-3597-0459")) 
+    )
+Description: Provides fast implementations of small area estimation (SAE) 
+    methods using C++ and RcppArmadillo for computational efficiency. 
+    The package currently supports the Fay-Herriot model with options 
+    for maximum likelihood (ML) and restricted maximum likelihood (REML) 
+    estimation, efficient estimation of regression coefficients, 
+    empirical best linear unbiased predictors (EBLUPs), mean squared 
+    error (MSE) components, and related model diagnostics (AIC, BIC, 
+    log-likelihood). Designed for large-scale applications where standard 
+    R implementations are too slow.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    Rcpp,
+    RcppArmadillo
+RoxygenNote: 7.3.2
