@@ -17,25 +17,19 @@
 #' @param print_result print coefficient or not, default value is TRUE.
 #'
 #' @returns The function returns a list with the following objects (\code{df_res} and \code{fit}):
-#' \code{df_res} a data frame that contains the following columns: \cr
-#'    * \code{y} variable response \cr
-#'    * \code{eblup} estimated results for each area \cr
-#'    * \code{random_effect} random effect for each area \cr
-#'    * \code{vardir} variance sampling from the direct estimator for each area \cr
-#'    * \code{mse} Mean Square Error \cr
-#'    * \code{rse} Relative Standart Error (%) \cr
-#'
-#' \code{fit} a list containing the following objects: \cr
-#'    * \code{estcoef} a data frame with the estimated model coefficients in the first column (beta),
+#' \code{estcoef} a data frame with the estimated model coefficients in the first column (beta),
 #'    their asymptotic standard errors in the second column (std.error),
 #'    the t-statistics in the third column (tvalue) and the p-values of the significance of each coefficient
 #'    in last column (pvalue) \cr
-#'    * \code{model_formula} model formula applied \cr
-#'    * \code{method} type of fitting method applied (`ML` or `REML`) \cr
-#'    * \code{random_effect_var} estimated random effect variance \cr
-#'    * \code{convergence} logical value that indicates the Fisher-scoring algorithm has converged or not \cr
-#'    * \code{n_iter} number of iterations performed by the Fisher-scoring algorithm. \cr
-#'    * \code{goodness} vector containing several goodness-of-fit measures: loglikehood, AIC, and BIC \cr
+#' \code{formula} model formula applied \cr
+#' \code{random_effect_var} estimated random effect variance \cr
+#' \code{goodness} vector containing several goodness-of-fit measures: loglikehood, AIC, and BIC \cr
+#' \code{df_eblup} a data frame that contains the following columns: \cr
+#'    * \code{y} variable response \cr
+#'    * \code{eblup} estimated results for each area \cr
+#'    * \code{random_effect} random effect for each area \cr
+#'    * \code{mse} Mean Square Error \cr
+#'    * \code{rse} Relative Standart Error (%) \cr
 #'
 #'
 #' @details
@@ -72,6 +66,11 @@ eblup_area <- function(
   y <- stats::model.response(mf, "numeric")
   X <- stats::model.matrix(attr(mf, "terms"), mf)
 
+  # cek Auxiliary variabels mengandung NA atau tidak
+  if (any(is.na(X))) {
+    cli::cli_abort("Auxiliary variabels contains NA values.")
+  }
+
   # panggil core C++
   res <- eblup_core_optimized(
     X = X,
@@ -84,10 +83,25 @@ eblup_area <- function(
   )
 
   # attach beberapa info tambahan
-  res$formula <- formula
-  res$method <- 'eblup'
-  res$level <- 'area'
-  class(res) <- "eblupfh"
+  coef_est <- data.frame(res$beta, res$stderr_beta, res$zvalue, res$pvalue)
+  colnames(coef_est) <- c("beta", "Std.Error", "z-value", "p-value")
+  df_eblup <- data.frame(
+    y = y,
+    eblup = res$eblup,
+    random_effect = res$u,
+    mse = res$mse
+  )
+
+  result <- list(
+    formula = formula,
+    estcoef = coef_est,
+    df_eblup = df_eblup,
+    random_effect_var = res$sigma2_u,
+    goodness = c(loglike = res$loglike, AIC = res$AIC, BIC = res$BIC),
+    method = 'eblup',
+    level = 'area'
+  )
+  class(result) <- "eblupfh"
 
   if (!res$convergence) {
     cli::cli_alert_danger("After {res$n_iter} iterations, there is no convergence.")

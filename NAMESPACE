@@ -1,1 +1,3 @@
 exportPattern("^[[:alpha:]]+")
+useDynLib(fastsae, .registration = TRUE)
+importFrom(Rcpp, evalCpp)

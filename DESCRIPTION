@@ -21,4 +21,7 @@ LazyData: true
 Imports: 
     Rcpp,
     RcppArmadillo
+LinkingTo: 
+    Rcpp,
+    RcppArmadillo
 RoxygenNote: 7.3.2

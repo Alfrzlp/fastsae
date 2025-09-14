@@ -1,11 +1,12 @@
 // src/eblup_core.cpp
 #include <RcppArmadillo.h>
+#include <Rcpp.h>
 using namespace Rcpp;
 using namespace arma;
 
 // [[Rcpp::depends(RcppArmadillo)]]
-
 // [[Rcpp::export]]
+
 List eblup_core_optimized(const arma::mat& X,
                           const arma::vec& y,
                           const arma::vec& vardir,
