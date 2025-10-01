@@ -11,26 +11,43 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// eblup_core_optimized
-List eblup_core_optimized(const arma::mat& X, const arma::vec& y, const arma::vec& vardir, std::string method, int maxiter, double precision, bool return_fullP);
-RcppExport SEXP _fastsae_eblup_core_optimized(SEXP XSEXP, SEXP ySEXP, SEXP vardirSEXP, SEXP methodSEXP, SEXP maxiterSEXP, SEXP precisionSEXP, SEXP return_fullPSEXP) {
+// eblup_core
+List eblup_core(const arma::mat& Xall, const arma::vec& yall, const arma::vec& vardirall, std::string method, int maxiter, double precision);
+RcppExport SEXP _fastsae_eblup_core(SEXP XallSEXP, SEXP yallSEXP, SEXP vardirallSEXP, SEXP methodSEXP, SEXP maxiterSEXP, SEXP precisionSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type vardir(vardirSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xall(XallSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type yall(yallSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type vardirall(vardirallSEXP);
     Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
     Rcpp::traits::input_parameter< int >::type maxiter(maxiterSEXP);
     Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
-    Rcpp::traits::input_parameter< bool >::type return_fullP(return_fullPSEXP);
-    rcpp_result_gen = Rcpp::wrap(eblup_core_optimized(X, y, vardir, method, maxiter, precision, return_fullP));
+    rcpp_result_gen = Rcpp::wrap(eblup_core(Xall, yall, vardirall, method, maxiter, precision));
+    return rcpp_result_gen;
+END_RCPP
+}
+// seblup_core
+List seblup_core(const arma::mat& Xall, const arma::vec& yall, const arma::vec& vardirall, const arma::mat& W, std::string method, int maxiter, double precision);
+RcppExport SEXP _fastsae_seblup_core(SEXP XallSEXP, SEXP yallSEXP, SEXP vardirallSEXP, SEXP WSEXP, SEXP methodSEXP, SEXP maxiterSEXP, SEXP precisionSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xall(XallSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type yall(yallSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type vardirall(vardirallSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type W(WSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< int >::type maxiter(maxiterSEXP);
+    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
+    rcpp_result_gen = Rcpp::wrap(seblup_core(Xall, yall, vardirall, W, method, maxiter, precision));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_fastsae_eblup_core_optimized", (DL_FUNC) &_fastsae_eblup_core_optimized, 7},
+    {"_fastsae_eblup_core", (DL_FUNC) &_fastsae_eblup_core, 6},
+    {"_fastsae_seblup_core", (DL_FUNC) &_fastsae_seblup_core, 7},
     {NULL, NULL, 0}
 };
 

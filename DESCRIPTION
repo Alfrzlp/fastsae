@@ -19,9 +19,12 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: 
-    Rcpp,
-    RcppArmadillo
+    cli,
+    methods,
+    Rcpp
 LinkingTo: 
     Rcpp,
     RcppArmadillo
 RoxygenNote: 7.3.2
+Depends: 
+    R (>= 3.5)

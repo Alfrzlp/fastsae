@@ -11,9 +11,11 @@
 #' @param data a data frame or a data frame extension (e.g. a tibble).
 #' @param vardir vector or column names from data that contain variance sampling from the direct estimator for each area.
 #' @param method Fitting method can be chosen between 'ML' and 'REML'.
+#' @param spatial Logical. If TRUE, a spatial correlation structure is incorporated in the random effects. Defaults to FALSE (no spatial correlation).
+#' @param W A square matrix of dimension equal to the number of areas. It should contain the row-standardized spatial weights (proximities) between domains,
+#' with values ranging from 0 to 1. Rows and columns must be ordered consistently with the domain identifiers in `data`.
 #' @param maxiter maximum number of iterations allowed in the Fisher-scoring algorithm. Default is 100 iterations.
 #' @param precision convergence tolerance limit for the Fisher-scoring algorithm. Default value is 0.0001.
-#' @param scale scaling auxiliary variable or not, default value is FALSE.
 #' @param print_result print coefficient or not, default value is TRUE.
 #'
 #' @returns The function returns a list with the following objects (\code{df_res} and \code{fit}):
@@ -28,6 +30,7 @@
 #'    * \code{y} variable response \cr
 #'    * \code{eblup} estimated results for each area \cr
 #'    * \code{random_effect} random effect for each area \cr
+#'    * \code{vardir} variance sampling from the direct estimator for each area \cr
 #'    * \code{mse} Mean Square Error \cr
 #'    * \code{rse} Relative Standart Error (%) \cr
 #'
@@ -35,14 +38,28 @@
 #' @details
 #' The model has a form that is response ~ auxiliary variables.
 #' where numeric type response variables can contain NA.
-#' When the response variable contains NA it will be estimated with cluster information.
+#' When the response variable contains NA it will be estimated with synthetic estimator.
 #'
 #' @export
 #' @examples
 #' library(fastsae)
 #'
-#' m1 <- eblup_area(y ~ x1 + x2 + x3, data = na.omit(mys), vardir = "var")
-#' m1 <- eblup_area(y ~ x1 + x2 + x3, data = na.omit(mys), vardir = ~var)
+#' # Standard Fay-Herriot model
+#' m1 <- eblup_area(
+#'   y ~ x1 + x2 + x3,
+#'   data = mys,
+#'   vardir = "vardir"
+#' )
+#'
+#' # Spatial Fay-Herriot model
+#' idx <- !is.na(mys$y)
+#' m1 <- eblup_area(
+#'   y ~ x1 + x2 + x3,
+#'   data = mys,
+#'   vardir = ~vardir,
+#'   spatial = TRUE,
+#'   W = mys_proxmat[idx, idx]
+#' )
 #'
 #' @md
 eblup_area <- function(
@@ -50,15 +67,18 @@ eblup_area <- function(
     vardir,
     data,
     method = c("REML", "ML"),
+    spatial = FALSE,
+    W = NULL,
     maxiter = 100,
     precision = 1e-4,
-    return_fullP = FALSE
+    print_result = TRUE
   ) {
   method <- match.arg(method, choices = c("REML", "ML"))
 
   # model frame & validasi
-  mf <- stats::model.frame(formula, data, na.action = stats::na.omit)
-  if (anyNA(vardir)) stop("'vardir' contains NA values")
+  mf <- stats::model.frame(formula, data, na.action = stats::na.pass)
+  vardir <- .get_variable(data, vardir)
+  # if (anyNA(vardir)) stop("'vardir' contains NA values")
   if (nrow(mf) != length(vardir)) {
     stop("Length of 'vardir' must equal number of observations in data")
   }
@@ -71,37 +91,35 @@ eblup_area <- function(
     cli::cli_abort("Auxiliary variabels contains NA values.")
   }
 
-  # panggil core C++
-  res <- eblup_core_optimized(
-    X = X,
-    y = y,
-    vardir = vardir,
-    method = method,
-    maxiter = maxiter,
-    precision = precision,
-    return_fullP = return_fullP
-  )
+  if (spatial) {
+    if (is.null(W)) {
+      cli::cli_abort("Argument `W` (spatial weight matrix) must be provided when `spatial = TRUE`.")
+    }
+
+    res <- .seblup_core(
+      Xall = X,
+      yall = y,
+      vardirall = vardir,
+      method = method,
+      W = W,
+      maxiter = maxiter,
+      precision = precision
+    )
+  }else{
+    res <- .eblup_core(
+      Xall = X,
+      yall = y,
+      vardirall = vardir,
+      method = method,
+      maxiter = maxiter,
+      precision = precision
+    )
+  }
 
   # attach beberapa info tambahan
-  coef_est <- data.frame(res$beta, res$stderr_beta, res$zvalue, res$pvalue)
-  colnames(coef_est) <- c("beta", "Std.Error", "z-value", "p-value")
-  df_eblup <- data.frame(
-    y = y,
-    eblup = res$eblup,
-    random_effect = res$u,
-    mse = res$mse
-  )
-
-  result <- list(
-    formula = formula,
-    estcoef = coef_est,
-    df_eblup = df_eblup,
-    random_effect_var = res$sigma2_u,
-    goodness = c(loglike = res$loglike, AIC = res$AIC, BIC = res$BIC),
-    method = 'eblup',
-    level = 'area'
-  )
-  class(result) <- "eblupfh"
+  row.names(res$estcoef) <- colnames(X)
+  res$call = match.call()
+  class(res) <- "fastsae"
 
   if (!res$convergence) {
     cli::cli_alert_danger("After {res$n_iter} iterations, there is no convergence.")
@@ -114,5 +132,26 @@ eblup_area <- function(
     cli::cli_h1("Coefficient")
     stats::printCoefmat(res$estcoef, signif.stars = TRUE)
   }
-  res
+  return(res)
+}
+
+# Fungsi Penolong ---------------------------------------------------------
+
+# extract variable from data frame
+.get_variable <- function(data, variable) {
+  if (length(variable) == nrow(data)) {
+    return(variable)
+  } else if (methods::is(variable, "character")) {
+    if (variable %in% colnames(data)) {
+      variable <- data[[variable]]
+    }else{
+      cli::cli_abort('variable "{variable}" is not found in the data')
+    }
+  } else if (methods::is(variable, "formula")) {
+    # extract column name (class character) from formula
+    variable <- data[[all.vars(variable)]]
+  } else {
+    cli::cli_abort('variable "{variable}" is not found in the data')
+  }
+  return(variable)
 }
