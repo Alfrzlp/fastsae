@@ -1,0 +1,12 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^\.github$
+^README\.Rmd$
+^\.posit/assistant$
+^\.claude$
+^\.RDataTmp$
+^\.checkpkgs\.R$
+^\.Rtmp$
+^\.DS_Store$
+^docs$

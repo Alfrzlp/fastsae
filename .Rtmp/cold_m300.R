@@ -1,0 +1,20 @@
+devtools::load_all(".", quiet = TRUE)
+generate_spatial_data <- function(n, beta = c(10,2,-1.5,0.8), A=4, sigma2=100, seed=1){
+  set.seed(seed)
+  x1 <- rnorm(n, 50, 10); x2 <- rnorm(n, 20, 5); x3 <- runif(n, 0, 100)
+  X <- cbind(1, x1, x2, x3)
+  u <- rnorm(n, 0, sqrt(A))
+  theta <- drop(X %*% beta + u)
+  ni <- sample(20:500, n, replace = TRUE)
+  vardir <- sigma2 / ni
+  y <- theta + rnorm(n, 0, sqrt(vardir))
+  dat <- data.frame(area=seq_len(n), y=y, x1=x1, x2=x2, x3=x3, vardir=vardir)
+  W <- matrix(runif(n*n, 0, 1), n, n)
+  W_std <- W / rowSums(W)
+  list(df=dat, W=W_std)
+}
+ds3 <- generate_spatial_data(300, seed = 4242)
+fit3 <- seblup_area(y ~ x1+x2+x3, "vardir", ds3$df, W = ds3$W, print_result = FALSE)
+t_pb  <- system.time(pb  <- .seblup_pbmse(fit3, B = 150, seed = 33, n_threads = 1))
+cat("cold m=300: pb_time=", t_pb[["elapsed"]], " pb_failed=", pb$B_failed, " rho=", fit3$rho, "\n")
+saveRDS(list(pb_mse=pb$mse_pb, pb_failed=pb$B_failed, pb_time=t_pb[["elapsed"]]), "./.Rtmp/cold_m300.rds")

@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fastsae — Fast Small Area Estimation</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ========================================
+       CSS Variables / Theme
+    ======================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f6f8fa;
+      --bg-tertiary: #eaeef2;
+      --bg-sidebar: #f6f8fa;
+      --fg: #1f2328;
+      --fg-secondary: #656d76;
+      --fg-muted: #8b949e;
+      --border: #d0d7de;
+      --border-muted: #d8dee4;
+      --accent: #0969da;
+      --accent-hover: #0550ae;
+      --accent-light: #ddf4ff;
+      --fastsae: #1D6A5C;
+      --sae: #C77B3B;
+      --emdi: #7A5FA8;
+      --shadow: rgba(31, 35, 40, 0.1);
+    }
+
+    [data-theme="dark"] {
+      --bg: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-sidebar: #010409;
+      --fg: #e6edf3;
+      --fg-secondary: #8b949e;
+      --fg-muted: #7d8590;
+      --border: #30363d;
+      --border-muted: #21262d;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --accent-light: #1f3d5c;
+      --shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    /* ========================================
+       Base Styles
+    ======================================== */
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--fg);
+      background: var(--bg);
+    }
+
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ========================================
+       Sidebar
+    ======================================== */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--fg);
+      text-decoration: none;
+    }
+
+    .sidebar-logo svg {
+      color: var(--fastsae);
+    }
+
+    .sidebar-logo:hover {
+      color: var(--accent);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      margin-bottom: 8px;
+    }
+
+    .nav-section-title {
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+    }
+
+    /* Parent nav item (clickable to expand/collapse) */
+    .nav-item-parent {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: var(--fg-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+    }
+
+    .nav-item-parent:hover {
+      background: var(--bg-tertiary);
+      color: var(--fg);
+    }
+
+    .nav-item-parent.active {
+      background: var(--accent-light);
+      color: var(--accent);
+    }
+
+    .nav-item-parent .nav-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-item-parent .chevron {
+      transition: transform 0.2s;
+    }
+
+    .nav-item-parent.expanded .chevron {
+      transform: rotate(90deg);
+    }
+
+    /* Submenu */
+    .nav-submenu {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+      padding-left: 8px;
+    }
+
+    .nav-submenu.expanded {
+      max-height: 500px;
+    }
+
+    .nav-submenu .nav-item {
+      padding-left: 36px;
+    }
+
+    /* Regular nav item */
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: var(--fg-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: all 0.15s;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-tertiary);
+      color: var(--fg);
+    }
+
+    .nav-item.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .nav-item svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.8;
+      flex-shrink: 0;
+    }
+
+    /* Sidebar Footer */
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sidebar-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--fg-secondary);
+      font-family: inherit;
+    }
+
+    .sidebar-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--fg);
+      border-color: var(--fg-muted);
+    }
+
+    .sidebar-btn.primary {
+      background: var(--fastsae);
+      color: #fff;
+      border-color: var(--fastsae);
+    }
+
+    .sidebar-btn.primary:hover {
+      background: #165a4a;
+      border-color: #165a4a;
+    }
+
+    .sidebar-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Theme Toggle Button */
+    .theme-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .theme-toggle-btn:hover {
+      background: var(--bg-tertiary);
+    }
+
+    .theme-toggle-btn .label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--fg-secondary);
+    }
+
+    .theme-toggle-btn svg {
+      width: 16px;
+      height: 16px;
+      color: var(--fg-secondary);
+    }
+
+    /* ========================================
+       Main Content
+    ======================================== */
+    .main {
+      flex: 1;
+      margin-left: 220px;
+      padding: 32px 48px;
+      max-width: 1000px;
+    }
+
+    .header {
+      margin-bottom: 32px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .badge {
+      font-size: 12px;
+      color: var(--fg-muted);
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--fg);
+    }
+
+    .subtitle {
+      color: var(--fg-secondary);
+      font-size: 15px;
+      max-width: 600px;
+    }
+
+    /* ========================================
+       Controls
+    ======================================== */
+    .controls {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--fg-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+
+    .btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--fg);
+    }
+
+    .btn.active {
+      background: var(--bg);
+      color: var(--fg);
+      box-shadow: 0 1px 2px var(--shadow);
+    }
+
+    .btn.accent.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ========================================
+       Content Section Styles
+    ======================================== */
+    .content-section {
+      margin-bottom: 48px;
+    }
+
+    .content-section h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--fg);
+      margin: 32px 0 16px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+
+    .content-section h2:first-of-type {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+    }
+
+    .content-header {
+      margin-bottom: 32px;
+    }
+
+    .content-header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .kw {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .k {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 20px;
+      color: var(--fg-secondary);
+    }
+
+    /* ========================================
+       Code Blocks
+    ======================================== */
+    pre {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    pre code {
+      font: 14px/1.5 monospace;
+      color: var(--fg);
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* ========================================
+       Tables
+    ======================================== */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 12px 0;
+    }
+
+    th {
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--fg-secondary);
+    }
+
+    td:first-child {
+      color: var(--fg);
+    }
+
+    code {
+      font: 14px/1.5 monospace;
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    p {
+      color: var(--fg-secondary);
+      margin-bottom: 12px;
+    }
+
+    /* ========================================
+       References Section
+    ======================================== */
+    .refs-section {
+      margin-top: 48px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+
+    .refs-section ul {
+      margin-left: 20px;
+      color: var(--fg-secondary);
+    }
+
+    .refs-section li {
+      margin-bottom: 8px;
+    }
+
+    /* ========================================
+       Charts
+    ======================================== */
+    .chart-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 20px 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px var(--shadow);
+    }
+
+    .chart-label {
+      font-size: 13px;
+      color: var(--fg-muted);
+      margin-bottom: 16px;
+      font-weight: 500;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 320px;
+    }
+
+    .narrative {
+      margin-top: 32px;
+      padding: 24px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .narrative h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 16px;
+    }
+
+    .narrative p {
+      color: var(--fg-secondary);
+      margin-bottom: 16px;
+      line-height: 1.7;
+    }
+
+    .narrative p:last-child {
+      margin-bottom: 0;
+    }
+
+    .narrative strong {
+      color: var(--fg);
+    }
+
+    /* ========================================
+       Responsive
+    ======================================== */
+    @media (max-width: 768px) {
+      .sidebar {
+        display: none;
+      }
+      .main {
+        margin-left: 0;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <!-- Header -->
+      <div class="sidebar-header">
+        <a href="#overview" class="sidebar-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          fastsae
+        </a>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="sidebar-nav">
+        <!-- Getting Started Section -->
+        <div class="nav-section">
+          <div class="nav-section-title">Getting Started</div>
+
+          <a href="#overview" class="nav-item" data-section="overview">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+            Overview
+          </a>
+
+          <a href="#install" class="nav-item" data-section="install">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Installation
+          </a>
+        </div>
+
+        <!-- Models Section with Collapsible -->
+        <div class="nav-section">
+          <div class="nav-section-title">Models</div>
+
+          <button class="nav-item-parent expanded" id="models-toggle">
+            <span class="nav-label">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+              </svg>
+              Supported Models
+            </span>
+            <svg class="chevron" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+
+          <div class="nav-submenu expanded" id="models-submenu">
+            <a href="#models" class="nav-item" data-section="models">
+              All Models
+            </a>
+            <a href="#eblup_area" class="nav-item" data-section="eblup_area">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+              </svg>
+              eblup_area
+            </a>
+            <a href="#seblup_area" class="nav-item" data-section="seblup_area">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+              </svg>
+              seblup_area
+            </a>
+            <a href="#eblup_unit" class="nav-item" data-section="eblup_unit">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+              </svg>
+              eblup_unit
+            </a>
+          </div>
+        </div>
+
+        <!-- Performance Section -->
+        <div class="nav-section">
+          <div class="nav-section-title">Performance</div>
+
+          <a href="#benchmark" class="nav-item" data-section="benchmark">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Performance
+          </a>
+        </div>
+
+        <!-- Reference Section -->
+        <div class="nav-section">
+          <div class="nav-section-title">Reference</div>
+
+          <a href="#refs" class="nav-item" data-section="refs">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+            </svg>
+            References
+          </a>
+        </div>
+      </nav>
+
+      <!-- Footer with Buttons -->
+      <div class="sidebar-footer">
+        <button class="theme-toggle-btn" onclick="toggleTheme()">
+          <span class="label">
+            <svg id="theme-icon-light" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            <svg id="theme-icon-dark" style="display:none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+            <span id="theme-text">Dark mode</span>
+          </span>
+        </button>
+
+        <a href="https://github.com/ridsonap/fastsae" class="sidebar-btn primary" target="_blank">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          View on GitHub
+        </a>
+
+        <a href="fastsae_0.1.0.tar.gz" class="sidebar-btn" download>
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Download Package
+        </a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- Overview Section -->
+      <section id="overview" class="content-section">
+        <div class="content-header">
+          <span class="badge">fastsae</span>
+          <h1>Fast Small Area Estimation</h1>
+          <p class="subtitle">
+            High-performance R package for Small Area Estimation using
+            Fay-Herriot, Spatial Fay-Herriot, and Battese-Harter-Fuller
+            models powered by C++.
+          </p>
+          <div class="kw">
+            <span class="k">up to 12,000x faster</span>
+            <span class="k">RcppArmadillo</span>
+            <span class="k">Parallel bootstrap</span>
+            <span class="k">GPL-3.0 license</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Installation Section -->
+      <section id="install" class="content-section">
+        <h2>Installation</h2>
+        <pre><code># Github Version
+install.packages("remotes")
+remotes::install_github("ridsonap/fastsae")
+
+# CRAN Version
+install.packages("fastsae")</code></pre>
+      </section>
+
+      <!-- Models Section -->
+      <section id="models" class="content-section">
+        <h2>Supported Models</h2>
+        <table>
+          <tr>
+            <th>Function</th>
+            <th>Model</th>
+            <th>MSE</th>
+          </tr>
+          <tr>
+            <td><code>eblup_area()</code></td>
+            <td>Fay-Herriot (area-level)</td>
+            <td>Analytical</td>
+          </tr>
+          <tr>
+            <td><code>seblup_area()</code></td>
+            <td>Spatial Fay-Herriot</td>
+            <td>Analytical, PBMSE, NPBMSE</td>
+          </tr>
+          <tr>
+            <td><code>eblup_unit()</code></td>
+            <td>Battese-Harter-Fuller (unit-level)</td>
+            <td>PBMSE</td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- eblup_area Section -->
+      <section id="eblup_area" class="content-section">
+        <h2>eblup_area — Fay-Herriot</h2>
+        <pre><code>library(fastsae)
+
+m1 <- eblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys,
+  vardir = "vardir",
+  method = "REML"
+)</code></pre>
+        <p>
+          Output: <code>df_eblup</code>, <code>estcoef</code>,
+          <code>random_effect_var</code>, <code>goodness</code>,
+          <code>n_iter</code>, <code>convergence</code>
+        </p>
+      </section>
+
+      <!-- seblup_area Section -->
+      <section id="seblup_area" class="content-section">
+        <h2>seblup_area — Spatial Fay-Herriot</h2>
+        <pre><code>m2 <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys,
+  vardir = "vardir",
+  W = mys_proxmat,
+  method = "REML"
+)</code></pre>
+
+        <p>Parametric Bootstrap MSE:</p>
+        <pre><code>m3 <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys,
+  vardir = "vardir",
+  method = "REML",
+  W = mys_proxmat,
+  mse_method = "pbmse",
+  B = 50,
+  n_threads = 4,
+  seed = 1
+)</code></pre>
+      </section>
+
+      <!-- eblup_unit Section -->
+      <section id="eblup_unit" class="content-section">
+        <h2>eblup_unit — Battese-Harter-Fuller</h2>
+        <pre><code>library(dplyr)
+
+# Prepare data
+df_meanpop <- cornsoybeanmeans |>
+  rename(CornPix = MeanCornPixPerSeg, SoyBeansPix = MeanSoyBeansPixPerSeg)
+df_cornsoybean <- cornsoybean |>
+  rename(CountyIndex = County)
+
+m3 <- eblup_unit(
+  formula = CornHec ~ CornPix + SoyBeansPix,
+  unit_data = df_cornsoybean,
+  Xpop = df_meanpop,
+  domain_var = "CountyIndex",
+  popsize_var = "PopnSegments"
+)</code></pre>
+      </section>
+
+      <!-- Performance Section -->
+      <section id="benchmark" class="content-section">
+        <h2>Performance</h2>
+
+        <div class="controls">
+          <div class="btn-group">
+            <button class="btn active" onclick="setAlgo('EBLUP')" id="btn-eblup">EBLUP</button>
+            <button class="btn" onclick="setAlgo('SEBLUP')" id="btn-seblup">SEBLUP</button>
+          </div>
+          <div class="btn-group">
+            <button class="btn accent active" onclick="setMetric('time')" id="btn-time">Time</button>
+            <button class="btn" onclick="setMetric('mem')" id="btn-mem">Memory</button>
+            <button class="btn" onclick="setMetric('ips')" id="btn-ips">Throughput</button>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-label" id="chart-label">
+            Execution time (median, seconds) — EBLUP · log scale
+          </div>
+          <div class="chart-container">
+            <canvas id="main-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-label">
+            Speedup factor of fastsae vs competitors — EBLUP
+          </div>
+          <div class="chart-container">
+            <canvas id="speedup-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="narrative">
+          <h3>Chart Explanations</h3>
+          <p>
+            <strong>Execution Time Chart:</strong> Shows how long each package
+            takes to complete estimation across different sample sizes.
+          </p>
+          <p>
+            <strong>Memory Usage:</strong> Displays peak RAM consumption during
+            estimation.
+          </p>
+          <p>
+            <strong>Speedup Chart:</strong> Illustrates the performance advantage
+            of fastsae over competitors.
+          </p>
+        </div>
+      </section>
+
+      <!-- References Section -->
+      <section id="refs" class="content-section refs-section">
+        <h2>References</h2>
+        <ul>
+          <li>Fay, R. E., &amp; Herriot, R. A. (1979). Estimates of income for small places. <em>JASA</em>, 74(366), 269-277.</li>
+          <li>Battese, G. E., Harter, R. M., &amp; Fuller, W. A. (1988). An error-components model. <em>JASA</em>, 83(401), 28-36.</li>
+          <li>Rao, J. N. K., &amp; Molina, I. (2015). <em>Small Area Estimation</em>, 2nd Ed. Wiley.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // ========================================
+    // Benchmark Data
+    // ========================================
+    const RAW = [
+      // EBLUP results
+      { Method: "fastsae", Median: 0.000588, Mem: 0.005, IPS: 1623, n: 30, Algo: "EBLUP" },
+      { Method: "emdi", Median: 0.01088, Mem: 4.18, IPS: 91, n: 30, Algo: "EBLUP" },
+      { Method: "sae", Median: 0.00155, Mem: 0.153, IPS: 632, n: 30, Algo: "EBLUP" },
+      { Method: "fastsae", Median: 0.000511, Mem: 0.009, IPS: 1912, n: 50, Algo: "EBLUP" },
+      { Method: "emdi", Median: 0.01806, Mem: 10.47, IPS: 52, n: 50, Algo: "EBLUP" },
+      { Method: "sae", Median: 0.00195, Mem: 0.373, IPS: 494, n: 50, Algo: "EBLUP" },
+      { Method: "fastsae", Median: 0.00055, Mem: 0.016, IPS: 1761, n: 100, Algo: "EBLUP" },
+      { Method: "emdi", Median: 0.0505, Mem: 37.34, IPS: 19, n: 100, Algo: "EBLUP" },
+      { Method: "sae", Median: 0.00344, Mem: 0.918, IPS: 288, n: 100, Algo: "EBLUP" },
+      { Method: "fastsae", Median: 0.0009, Mem: 0.039, IPS: 1081, n: 250, Algo: "EBLUP" },
+      { Method: "emdi", Median: 0.857, Mem: 240.89, IPS: 1.16, n: 250, Algo: "EBLUP" },
+      { Method: "sae", Median: 0.0376, Mem: 6.35, IPS: 26, n: 250, Algo: "EBLUP" },
+      { Method: "fastsae", Median: 0.0014, Mem: 0.076, IPS: 697, n: 500, Algo: "EBLUP" },
+      { Method: "emdi", Median: 5.86, Mem: 880.31, IPS: 0.17, n: 500, Algo: "EBLUP" },
+      { Method: "sae", Median: 0.197, Mem: 18.24, IPS: 5.03, n: 500, Algo: "EBLUP" },
+      { Method: "fastsae", Median: 0.00413, Mem: 0.186, IPS: 176, n: 1000, Algo: "EBLUP" },
+      { Method: "emdi", Median: 51.02, Mem: 3773.6, IPS: 0.02, n: 1000, Algo: "EBLUP" },
+      { Method: "sae", Median: 1.504, Mem: 72.0, IPS: 0.66, n: 1000, Algo: "EBLUP" },
+
+      // SEBLUP results
+      { Method: "fastsae", Median: 0.000735, Mem: 0.03, IPS: 1312, n: 30, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 0.01071, Mem: 4.18, IPS: 93, n: 30, Algo: "SEBLUP" },
+      { Method: "sae", Median: 0.0041, Mem: 1.37, IPS: 246, n: 30, Algo: "SEBLUP" },
+      { Method: "fastsae", Median: 0.00115, Mem: 0.074, IPS: 841, n: 50, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 0.018, Mem: 10.47, IPS: 44, n: 50, Algo: "SEBLUP" },
+      { Method: "sae", Median: 0.00968, Mem: 3.31, IPS: 103, n: 50, Algo: "SEBLUP" },
+      { Method: "fastsae", Median: 0.00473, Mem: 0.259, IPS: 208, n: 100, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 0.053, Mem: 37.34, IPS: 17, n: 100, Algo: "SEBLUP" },
+      { Method: "sae", Median: 0.0705, Mem: 18.0, IPS: 13, n: 100, Algo: "SEBLUP" },
+      { Method: "fastsae", Median: 0.0238, Mem: 1.5, IPS: 37, n: 250, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 0.844, Mem: 240.89, IPS: 1.17, n: 250, Algo: "SEBLUP" },
+      { Method: "sae", Median: 1.07, Mem: 110.39, IPS: 0.93, n: 250, Algo: "SEBLUP" },
+      { Method: "fastsae", Median: 0.142, Mem: 5.86, IPS: 6.96, n: 500, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 3.14, Mem: 949.86, IPS: 0.32, n: 500, Algo: "SEBLUP" },
+      { Method: "sae", Median: 7.12, Mem: 776.4, IPS: 0.14, n: 500, Algo: "SEBLUP" },
+      { Method: "fastsae", Median: 0.832, Mem: 23.15, IPS: 1.19, n: 1000, Algo: "SEBLUP" },
+      { Method: "emdi", Median: 51.06, Mem: 3772.6, IPS: 0.02, n: 1000, Algo: "SEBLUP" },
+      { Method: "sae", Median: 67.15, Mem: 1920.0, IPS: 0.015, n: 1000, Algo: "SEBLUP" },
+    ];
+
+    const N_LEVELS = [30, 50, 100, 250, 500, 1000];
+    const METHODS = ["fastsae", "sae", "emdi"];
+    const COLORS = {
+      fastsae: "#1D6A5C",
+      sae: "#C77B3B",
+      emdi: "#7A5FA8"
+    };
+
+    let currentAlgo = "EBLUP";
+    let currentMetric = "time";
+    let mainChart, speedupChart;
+
+    // ========================================
+    // Formatting Utilities
+    // ========================================
+    function fmt(value, metric) {
+      if (metric === "time") {
+        if (value < 0.001) return (value * 1e6).toFixed(0) + " µs";
+        if (value < 1) return (value * 1000).toFixed(2) + " ms";
+        return value.toFixed(2) + " s";
+      }
+      if (metric === "mem") return value.toFixed(2) + " MB";
+      if (metric === "ips") return value.toFixed(2);
+      return value;
+    }
+
+    function getMetricLabel(metric) {
+      if (metric === "time") return "Execution time (median, seconds)";
+      if (metric === "mem") return "Memory usage (MB)";
+      if (metric === "ips") return "Iterations per second";
+      return metric;
+    }
+
+    // ========================================
+    // Data Processing
+    // ========================================
+    function pivotData(algo, key) {
+      return N_LEVELS.map(n => {
+        const row = { n: String(n) };
+        METHODS.forEach(m => {
+          const rec = RAW.find(r => r.Algo === algo && r.n === n && r.Method === m);
+          row[m] = rec ? rec[key] : null;
+        });
+        return row;
+      });
+    }
+
+    function speedupData(algo) {
+      return N_LEVELS.map(n => {
+        const f = RAW.find(r => r.Algo === algo && r.n === n && r.Method === "fastsae");
+        const s = RAW.find(r => r.Algo === algo && r.n === n && r.Method === "sae");
+        const e = RAW.find(r => r.Algo === algo && r.n === n && r.Method === "emdi");
+        return {
+          n: String(n),
+          vsSae: f && s ? s.Median / f.Median : null,
+          vsEmdi: f && e ? e.Median / f.Median : null,
+        };
+      });
+    }
+
+    // ========================================
+    // Chart Controls
+    // ========================================
+    function setAlgo(algo) {
+      currentAlgo = algo;
+      document.getElementById("btn-eblup").classList.toggle("active", algo === "EBLUP");
+      document.getElementById("btn-seblup").classList.toggle("active", algo === "SEBLUP");
+      updateCharts();
+    }
+
+    function setMetric(metric) {
+      currentMetric = metric;
+      document.getElementById("btn-time").classList.toggle("accent", metric === "time");
+      document.getElementById("btn-time").classList.toggle("active", metric === "time");
+      document.getElementById("btn-mem").classList.toggle("accent", metric === "mem");
+      document.getElementById("btn-mem").classList.toggle("active", metric === "mem");
+      document.getElementById("btn-ips").classList.toggle("accent", metric === "ips");
+      document.getElementById("btn-ips").classList.toggle("active", metric === "ips");
+      document.getElementById("chart-label").textContent =
+        getMetricLabel(metric) + " — " + currentAlgo + " · log scale";
+      updateCharts();
+    }
+
+    function updateCharts() {
+      const metricKey = currentMetric === "time" ? "Median"
+        : currentMetric === "mem" ? "Mem" : "IPS";
+      const chartData = pivotData(currentAlgo, metricKey);
+      const spdData = speedupData(currentAlgo);
+
+      mainChart.data.labels = chartData.map(d => d.n);
+      mainChart.data.datasets[0].data = chartData.map(d => d.fastsae);
+      mainChart.data.datasets[1].data = chartData.map(d => d.sae);
+      mainChart.data.datasets[2].data = chartData.map(d => d.emdi);
+      mainChart.options.scales.y.type = "logarithmic";
+      mainChart.options.scales.y.title.display = true;
+      mainChart.options.scales.y.title.text = getMetricLabel(currentMetric);
+      mainChart.update();
+
+      speedupChart.data.labels = spdData.map(d => d.n);
+      speedupChart.data.datasets[0].data = spdData.map(d => d.vsSae);
+      speedupChart.data.datasets[1].data = spdData.map(d => d.vsEmdi);
+      speedupChart.update();
+    }
+
+    // ========================================
+    // Chart Initialization
+    // ========================================
+    function initCharts() {
+      const ctx1 = document.getElementById("main-chart").getContext("2d");
+      const ctx2 = document.getElementById("speedup-chart").getContext("2d");
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const gridColor = isDark ? "rgba(48, 54, 61, 0.6)" : "rgba(31, 35, 40, 0.1)";
+      const textColor = isDark ? "#8b949e" : "#656d76";
+
+      // Main line chart
+      mainChart = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "fastsae",
+              data: [],
+              borderColor: COLORS.fastsae,
+              backgroundColor: COLORS.fastsae + "20",
+              tension: 0.3,
+              fill: true,
+              pointRadius: 5,
+              pointHoverRadius: 7
+            },
+            {
+              label: "sae",
+              data: [],
+              borderColor: COLORS.sae,
+              backgroundColor: COLORS.sae + "20",
+              tension: 0.3,
+              fill: true,
+              pointRadius: 5,
+              pointHoverRadius: 7
+            },
+            {
+              label: "emdi",
+              data: [],
+              borderColor: COLORS.emdi,
+              backgroundColor: COLORS.emdi + "20",
+              tension: 0.3,
+              fill: true,
+              pointRadius: 5,
+              pointHoverRadius: 7
+            },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { intersect: false, mode: "index" },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "n (number of areas)",
+                color: textColor
+              },
+              grid: { color: gridColor }
+            },
+            y: {
+              type: "logarithmic",
+              title: {
+                display: true,
+                text: "",
+                color: textColor
+              },
+              grid: { color: gridColor }
+            }
+          },
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: {
+                usePointStyle: true,
+                padding: 20,
+                font: { size: 13 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.label + ": " + fmt(ctx.raw, currentMetric)
+              }
+            }
+          }
+        }
+      });
+
+      // Speedup bar chart
+      speedupChart = new Chart(ctx2, {
+        type: "bar",
+        data: {
+          labels: [],
+          datasets: [
+            { label: "vs sae", data: [], backgroundColor: COLORS.sae, borderRadius: 4 },
+            { label: "vs emdi", data: [], backgroundColor: COLORS.emdi, borderRadius: 4 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "n (number of areas)",
+                color: textColor
+              },
+              grid: { color: gridColor }
+            },
+            y: {
+              type: "logarithmic",
+              title: {
+                display: true,
+                text: "Speedup factor (times faster)",
+                color: textColor
+              },
+              grid: { color: gridColor }
+            }
+          },
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: {
+                usePointStyle: true,
+                padding: 20,
+                font: { size: 13 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.label + ": " + ctx.raw.toFixed(1) + "x faster"
+              }
+            }
+          }
+        }
+      });
+
+      updateCharts();
+    }
+
+    // ========================================
+    // Sidebar Navigation
+    // ========================================
+    function initSidebar() {
+      // Models collapsible toggle
+      const modelsToggle = document.getElementById('models-toggle');
+      const modelsSubmenu = document.getElementById('models-submenu');
+
+      if (modelsToggle && modelsSubmenu) {
+        modelsToggle.addEventListener('click', () => {
+          modelsToggle.classList.toggle('expanded');
+          modelsSubmenu.classList.toggle('expanded');
+        });
+      }
+
+      // Active state based on current section
+      const navItems = document.querySelectorAll('.nav-item');
+      const sections = document.querySelectorAll('.content-section[id]');
+
+      // Update active state on scroll
+      function updateActiveState() {
+        const scrollPos = window.scrollY + 100;
+
+        sections.forEach(section => {
+          const top = section.offsetTop;
+          const bottom = top + section.offsetHeight;
+          const id = section.getAttribute('id');
+
+          if (scrollPos >= top && scrollPos < bottom) {
+            // Remove active from all
+            navItems.forEach(item => item.classList.remove('active'));
+            modelsToggle.classList.remove('active');
+
+            // Add active to current
+            const activeItem = document.querySelector(`.nav-item[data-section="${id}"]`);
+            if (activeItem) {
+              activeItem.classList.add('active');
+            }
+
+            // If in models section, expand and highlight parent
+            if (['models', 'eblup_area', 'seblup_area', 'eblup_unit'].includes(id)) {
+              modelsToggle.classList.add('active', 'expanded');
+              modelsSubmenu.classList.add('expanded');
+            }
+          }
+        });
+      }
+
+      // Add click handlers for nav items
+      navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+          // Remove active from all
+          navItems.forEach(i => i.classList.remove('active'));
+          modelsToggle.classList.remove('active');
+
+          // Add active to clicked
+          item.classList.add('active');
+
+          // If in models section, highlight parent
+          const section = item.dataset.section;
+          if (['models', 'eblup_area', 'seblup_area', 'eblup_unit'].includes(section)) {
+            modelsToggle.classList.add('active');
+          }
+        });
+      });
+
+      // Listen for scroll
+      window.addEventListener('scroll', updateActiveState);
+
+      // Initial check
+      updateActiveState();
+    }
+
+    // ========================================
+    // Theme Toggle
+    // ========================================
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.getAttribute("data-theme") === "dark";
+      html.setAttribute("data-theme", isDark ? "light" : "dark");
+      document.getElementById("theme-icon-light").style.display = isDark ? "none" : "block";
+      document.getElementById("theme-icon-dark").style.display = isDark ? "block" : "none";
+      document.getElementById("theme-text").textContent = isDark ? "Dark mode" : "Light mode";
+      localStorage.setItem("theme", isDark ? "light" : "dark");
+    }
+
+    // ========================================
+    // Initialize on DOM Ready
+    // ========================================
+    document.addEventListener("DOMContentLoaded", function() {
+      // Theme
+      const saved = localStorage.getItem("theme");
+      if (saved) document.documentElement.setAttribute("data-theme", saved);
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      document.getElementById("theme-icon-light").style.display = isDark ? "none" : "block";
+      document.getElementById("theme-icon-dark").style.display = isDark ? "block" : "none";
+      document.getElementById("theme-text").textContent = isDark ? "Light mode" : "Dark mode";
+
+      // Sidebar
+      initSidebar();
+
+      // Charts
+      initCharts();
+    });
+  </script>
+</body>
+</html>

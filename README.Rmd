@@ -1,0 +1,334 @@
+---
+output: github_document
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+# fastsae
+
+<!-- badges: start -->
+
+[![R-CMD-check](https://github.com/ridsonap/fastsae/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ridsonap/fastsae/actions/workflows/R-CMD-check.yaml)
+
+<!-- badges: end -->
+
+## Overview
+
+**fastsae** provides fast implementations of small area estimation (SAE)
+methods using C++ (RcppArmadillo) for computational efficiency. It is
+designed for large-scale applications where standard R implementations
+are too slow.
+
+### Supported Models
+
+| Model | Description | MSE Estimation |
+|------------------------|------------------------|------------------------|
+| Fay-Herriot (Area-level) | `eblup_area()` | Analytical |
+| Spatial Fay-Herriot | `seblup_area()` | Analytical, Parametric Bootstrap MSE, Non Parametric Bootstrap MSE (Bias Corrected & Non Bias Corrected) |
+| Battese-Harter-Fuller (Unit-level) | `eblup_unit()` | Parametric Bootstrap MSE |
+
+## Installation
+
+``` r
+# Install from GitHub
+install.packages("remotes")
+remotes::install_github("ridsonap/fastsae")
+
+# Or from CRAN
+install.packages("fastsae")
+```
+
+### Dependencies
+
+**Imports:** cli, dplyr, lme4, Rcpp, RcppArmadillo, RcppParallel,
+methods
+
+## Quick Start
+
+### Fay-Herriot Model
+
+``` r
+library(fastsae)
+
+# Using sampled areas only
+mys_sampled <- mys[!is.na(mys$y), ]
+m1 <- eblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys_sampled,
+  vardir = "vardir",
+  method = "REML"
+)
+```
+
+### Spatial Fay-Herriot Model
+
+``` r
+# Using sampled areas only
+mys_sampled <- mys[!is.na(mys$y), ]
+W_sampled <- mys_proxmat[!is.na(mys$y), !is.na(mys$y)]
+
+m2 <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys_sampled,
+  vardir = "vardir",
+  W = W_sampled,
+  method = "REML"
+)
+```
+
+#### Bootstrap MSE
+
+``` r
+# Parametric Bootstrap MSE
+m_pb <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys_sampled,
+  vardir = "vardir",
+  W = W_sampled,
+  mse_method = "pbmse",
+  B = 100,
+  seed = 123
+)
+
+# Nonparametric Bootstrap MSE
+m_npb <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys_sampled,
+  vardir = "vardir",
+  W = W_sampled,
+  mse_method = "npbmse",
+  B = 100,
+  seed = 123
+)
+```
+
+#### Parallel Computation
+
+fastsae supports multi-threaded bootstrap MSE estimation via OpenMP:
+
+``` r
+# Use multiple threads for bootstrap
+m_parallel <- seblup_area(
+  y ~ x1 + x2 + x3,
+  data = mys_sampled,
+  vardir = "vardir",
+  W = W_sampled,
+  mse_method = "pbmse",
+  B = 200,
+  n_threads = 4  # Use 4 threads
+)
+```
+
+### Battese-Harter-Fuller Model (Unit-Level)
+
+``` r
+library(dplyr)
+
+# Prepare data
+df_meanpop <- cornsoybeanmeans |>
+  rename(CornPix = MeanCornPixPerSeg, SoyBeansPix = MeanSoyBeansPixPerSeg)
+df_cornsoybean <- cornsoybean |>
+  rename(CountyIndex = County)
+
+m3 <- eblup_unit(
+  formula = CornHec ~ CornPix + SoyBeansPix,
+  unit_data = df_cornsoybean,
+  Xpop = df_meanpop,
+  domain_var = "CountyIndex",
+  popsize_var = "PopnSegments"
+)
+```
+
+## Output Structure
+
+All fitting functions return a list with:
+
+| Component           | Description                                       |
+|---------------------|---------------------------------------------------|
+| `df_eblup`          | Data frame with eblup, mse, rse estimates         |
+| `estcoef`           | Regression coefficients with SE, z-value, p-value |
+| `random_effect_var` | Estimated variance of random effects              |
+| `goodness`          | Log-likelihood, AIC, BIC                          |
+| `n_iter`            | Number of iterations                              |
+| `convergence`       | Logical: did algorithm converge?                  |
+
+## Benchmark
+
+fastsae is benchmarked against **sae** and **emdi** packages across
+sample sizes ranging from n=30 to n=1000 with 5 covariates.
+
+### Performance Summary
+
+| Metric                   | fastsae  | sae     | emdi   |
+|--------------------------|----------|---------|--------|
+| **Mean Time (EBLUP)**    | 0.0015s  | 0.291s  | 9.64s  |
+| **Mean Time (SEBLUP)**   | 0.165s   | 12.6s   | 8.69s  |
+| **Mean Memory (EBLUP)**  | 0.055 MB | 16.3 MB | 824 MB |
+| **Mean Memory (SEBLUP)** | 5.15 MB  | 408 MB  | 824 MB |
+
+------------------------------------------------------------------------
+
+### Execution Time Comparison
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(scales)
+
+eblup <- readRDS("inst/exdata/eblup_benchmark.rds")
+seblup <- readRDS("inst/exdata/seblup_benchmark.rds")
+
+eblup_time <- eblup %>% mutate(Algorithm = "EBLUP")
+seblup_time <- seblup %>% mutate(Algorithm = "SEBLUP")
+combined_data <- bind_rows(eblup_time, seblup_time)
+
+combined_data <- combined_data |>
+  rename(Median = `Median (s)`, Mem = `Memory (MB)`)
+
+ggplot(combined_data, aes(x = n, y = Median, color = Method)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_log10(breaks = c(30, 50, 100, 250, 500, 1000)) +
+  scale_y_log10(labels = label_number(suffix = "s")) +
+  facet_wrap(~Algorithm) +
+  labs(
+    title = "Execution Time (seconds) - Log Scale",
+    subtitle = "Lower = faster",
+    x = "Number of Areas (n)",
+    y = "Median Time (seconds, log scale)",
+    color = "Package"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", panel.grid.minor = element_blank())
+```
+
+The execution time chart shows how long each package takes to complete
+estimation across different sample sizes. The Y-axis shows median
+execution time in seconds on a logarithmic scale where each tick
+represents a 10x increase.
+
+### Memory Usage Comparison
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(combined_data, aes(x = n, y = Mem, color = Method)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_log10(breaks = c(30, 50, 100, 250, 500, 1000)) +
+  scale_y_log10(labels = label_number(suffix = " MB")) +
+  facet_wrap(~Algorithm) +
+  labs(
+    title = "Memory Usage (MB) - Log Scale",
+    subtitle = "Lower = more memory efficient",
+    x = "Number of Areas (n)",
+    y = "Memory (MB, log scale)",
+    color = "Package"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom", panel.grid.minor = element_blank())
+```
+
+The memory usage chart displays peak RAM consumption during estimation.
+Memory is measured in megabytes on a logarithmic Y-axis, allowing
+comparison between packages that use vastly different amounts. fastsae
+maintains minimal memory usage of approximately 0.02 MB for EBLUP and 23
+MB for SEBLUP even at n=1000.
+
+------------------------------------------------------------------------
+
+### Speedup Factor
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+df_speedup <- combined_data |>
+  select(n, Method, Median, Algorithm) |>
+  tidyr::pivot_wider(
+    names_from = Method,
+    values_from = Median
+  ) |>
+  mutate(
+    sae_speedup = sae / fastsae,
+    emdi_speedup = emdi / fastsae
+  )
+
+df_speedup_long <- df_speedup |>
+  select(n, Algorithm, sae_speedup, emdi_speedup) |>
+  pivot_longer(
+    -c(n, Algorithm),
+    names_to = "method",
+    values_to = "speedup"
+  )
+
+ggplot(
+  df_speedup_long,
+  aes(x = n, y = speedup, group = method, color = method)
+) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "gray") +
+  scale_y_log10(labels = scales::label_number(suffix = "x")) +
+  labs(
+    title = "Speedup: How Many Times Faster is fastsae?",
+    subtitle = "Above 1x = fastsae is faster",
+    x = "Number of Areas (n)",
+    y = "Speedup Factor (times)",
+    color = "Compared to"
+  ) +
+  facet_wrap(~Algorithm) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+The speedup chart illustrates the performance advantage of fastsae over
+competitors by showing how many times faster it executes. The dashed
+horizontal line at y=1 represents equal performance; points above this
+line indicate fastsae is faster. For EBLUP with n=1000, fastsae achieves
+a 12,343x speedup over emdi and a 34x speedup over sae.
+
+------------------------------------------------------------------------
+
+### Key Findings
+
+fastsae demonstrates substantial performance advantages over both sae
+and emdi packages across all tested configurations. The speedup factor
+ranges from 19x at small sample sizes (n=30) to 12,343x at large sample
+sizes (n=1000) when compared to emdi. Memory consumption follows a
+similar pattern, with fastsae using 100 to 20,000 times less RAM
+depending on sample size and algorithm type. The EBLUP algorithm shows
+the most dramatic improvements, while SEBLUP maintains consistent
+advantages of 11-81x over emdi.
+
+------------------------------------------------------------------------
+
+### Detailed Benchmark Results
+
+**EBLUP (p = 5)**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+benchmark_result <- readRDS("inst/exdata/eblup_benchmark.rds")
+knitr::kable(
+  dplyr::select(benchmark_result, -n_iter),
+  digits = 5
+)
+```
+
+**SEBLUP (p = 5)**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+benchmark_result <- readRDS("inst/exdata/seblup_benchmark.rds")
+knitr::kable(
+  dplyr::select(benchmark_result, -n_iter) |> arrange(n),
+  digits = 5
+)
+```
+
+## References
+
+- Fay, R. E., & Herriot, R. A. (1979). Estimates of income for small
+  places: An application of James-Stein procedures to Census data.
+  *JASA*, 74(366), 269-277.
+- Battese, G. E., Harter, R. M., & Fuller, W. A. (1988). An
+  error-components model for prediction of county crop areas using
+  survey and satellite data. *JASA*, 83(401), 28-36.
+- Rao, J. N. K., & Molina, I. (2015). *Small Area Estimation*, 2nd
+  Edition. Wiley.

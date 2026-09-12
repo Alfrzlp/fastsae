@@ -1,0 +1,6 @@
+exportPattern("^[[:alpha:]]+")
+useDynLib(fastsae, .registration = TRUE)
+importFrom(Rcpp, evalCpp)
+importFrom(RcppParallel, RcppParallelLibs)
+importFrom("stats", "rnorm")
+importFrom("utils", "head")

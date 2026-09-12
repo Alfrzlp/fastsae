@@ -1,0 +1,158 @@
+#!/bin/sh
+# configure for fastsae
+
+## Get R_HOME
+R_HOME="${R_HOME:-$(R RHOME)}"
+RSCRIPT="${R_HOME}/bin/Rscript"
+
+## Create temp R script
+TEMP_R=$(mktemp)
+trap "rm -f $TEMP_R" EXIT
+
+## Write R code to temp file
+cat > "$TEMP_R" << 'RSCRIPT_EOF'
+# Detect OS
+os <- Sys.info()[["sysname"]]
+message("Detected OS: ", os)
+
+# Get RcppParallel libs using tempfile method
+temp_script <- tempfile(fileext = ".R")
+writeLines(c("cat(RcppParallel::RcppParallelLibs())"), temp_script)
+parallel_output <- system2(file.path(R.home(), "bin", "Rscript"),
+                          args = shQuote(temp_script),
+                          stdout = TRUE, stderr = TRUE)
+unlink(temp_script)
+parallel_libs <- paste(parallel_output, collapse = " ")
+message("Parallel libs: ", parallel_libs)
+
+# Start with parallel libs
+pkg_libs <- parallel_libs
+
+# Linux needs LAPACK/BLAS/FLIBS
+if (os == "Linux") {
+    message("Adding LAPACK for Linux...")
+
+    R_bin <- file.path(R.home(), "bin", "R")
+    R_lib <- file.path(R.home(), "lib")
+
+    # Get flags from R CMD config
+    lapack <- paste(system2(R_bin, args = "CMD config LAPACK_LIBS", stdout = TRUE, stderr = FALSE), collapse = " ")
+    blas <- paste(system2(R_bin, args = "CMD config BLAS_LIBS", stdout = TRUE, stderr = FALSE), collapse = " ")
+    flibs <- paste(system2(R_bin, args = "CMD config FLIBS", stdout = TRUE, stderr = FALSE), collapse = " ")
+
+    message("From R CMD config:")
+    message("  LAPACK: '", lapack, "'")
+    message("  BLAS: '", blas, "'")
+    message("  FLIBS: '", flibs, "'")
+
+    # Build lib paths to check
+    lib_paths <- c(
+        R_lib,
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+        "/usr/local/lib",
+        "/usr/local/lib64"
+    )
+
+    # Check for libRlapack.so first (preferred)
+    found_lapack <- FALSE
+    for (lib_dir in lib_paths) {
+        if (file.exists(file.path(lib_dir, "libRlapack.so")) ||
+            file.exists(file.path(lib_dir, "libRlapack.a"))) {
+            lapack <- paste0("-L", lib_dir, " -lRlapack")
+            found_lapack <- TRUE
+            message("Found libRlapack in: ", lib_dir)
+            break
+        }
+    }
+
+    # Check for system lapack
+    if (!found_lapack) {
+        for (lib_dir in lib_paths) {
+            if (file.exists(file.path(lib_dir, "liblapack.so")) ||
+                file.exists(file.path(lib_dir, "liblapack.so.3"))) {
+                lapack <- paste0("-L", lib_dir, " -llapack")
+                found_lapack <- TRUE
+                message("Found liblapack in: ", lib_dir)
+                break
+            }
+        }
+    }
+
+    # Default if not found
+    if (!found_lapack && nchar(lapack) == 0) {
+        lapack <- "-llapack"
+    }
+
+    # Check for libRblas.so
+    found_blas <- FALSE
+    for (lib_dir in lib_paths) {
+        if (file.exists(file.path(lib_dir, "libRblas.so")) ||
+            file.exists(file.path(lib_dir, "libRblas.a"))) {
+            blas <- paste0("-L", lib_dir, " -lRblas")
+            found_blas <- TRUE
+            message("Found libRblas in: ", lib_dir)
+            break
+        }
+    }
+
+    # Check for system blas
+    if (!found_blas) {
+        for (lib_dir in lib_paths) {
+            if (file.exists(file.path(lib_dir, "libblas.so")) ||
+                file.exists(file.path(lib_dir, "libblas.so.3"))) {
+                blas <- paste0("-L", lib_dir, " -lblas")
+                found_blas <- TRUE
+                message("Found libblas in: ", lib_dir)
+                break
+            }
+        }
+    }
+
+    if (!found_blas && nchar(blas) == 0) {
+        blas <- "-lblas"
+    }
+
+    # Check for gfortran
+    found_flibs <- FALSE
+    flib_paths <- c(
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+        "/usr/local/lib",
+        "/opt/R/lib"
+    )
+
+    for (lib_dir in flib_paths) {
+        if (file.exists(file.path(lib_dir, "libgfortran.so")) ||
+            file.exists(file.path(lib_dir, "libgfortran.a"))) {
+            flibs <- paste0("-L", lib_dir, " -lgfortran -lm")
+            found_flibs <- TRUE
+            message("Found gfortran in: ", lib_dir)
+            break
+        }
+    }
+
+    if (!found_flibs && nchar(flibs) == 0) {
+        flibs <- "-lgfortran -lm"
+    }
+
+    message("Final LAPACK: ", lapack)
+    message("Final BLAS: ", blas)
+    message("Final FLIBS: ", flibs)
+
+    pkg_libs <- paste(pkg_libs, lapack, blas, flibs)
+}
+
+# Write Makevars
+makevars <- sprintf("CXX_STD = CXX17\n\nPKG_LIBS = %s\n",
+                   pkg_libs)
+writeLines(makevars, "src/Makevars")
+message("Generated src/Makevars")
+RSCRIPT_EOF
+
+## Run the R script
+"$RSCRIPT" "$TEMP_R"

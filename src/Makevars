@@ -1,0 +1,4 @@
+CXX_STD = CXX17
+
+PKG_LIBS = -L/Library/Frameworks/R.framework/Versions/4.6/Resources/library/RcppParallel/lib -Wl,-rpath,/Library/Frameworks/R.framework/Versions/4.6/Resources/library/RcppParallel/lib -ltbb -ltbbmalloc
+
