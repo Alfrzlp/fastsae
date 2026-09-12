@@ -643,23 +643,29 @@
             <a href="#models" class="nav-item" data-section="models">
               All Models
             </a>
-            <a href="#eblup_area" class="nav-item" data-section="eblup_area">
+            <a href="#eblup_fh" class="nav-item" data-section="eblup_fh">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
               </svg>
-              eblup_area
+              eblup_fh
             </a>
-            <a href="#seblup_area" class="nav-item" data-section="seblup_area">
+            <a href="#eblup_sfh" class="nav-item" data-section="eblup_sfh">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
               </svg>
-              seblup_area
+              eblup_sfh
             </a>
-            <a href="#eblup_unit" class="nav-item" data-section="eblup_unit">
+            <a href="#eblup_stfh" class="nav-item" data-section="eblup_stfh">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
               </svg>
-              eblup_unit
+              eblup_stfh
+            </a>
+            <a href="#eblup_bhf" class="nav-item" data-section="eblup_bhf">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+              </svg>
+              eblup_bhf
             </a>
           </div>
         </div>
@@ -760,29 +766,34 @@ install.packages("fastsae")</code></pre>
             <th>MSE</th>
           </tr>
           <tr>
-            <td><code>eblup_area()</code></td>
+            <td><code>eblup_fh()</code></td>
             <td>Fay-Herriot (area-level)</td>
             <td>Analytical</td>
           </tr>
           <tr>
-            <td><code>seblup_area()</code></td>
+            <td><code>eblup_sfh()</code></td>
             <td>Spatial Fay-Herriot</td>
             <td>Analytical, PBMSE, NPBMSE</td>
           </tr>
           <tr>
-            <td><code>eblup_unit()</code></td>
+            <td><code>eblup_stfh()</code></td>
+            <td>Spatio Temporal Fay-Herriot</td>
+            <td>PBMSE</td>
+          </tr>
+          <tr>
+            <td><code>eblup_bhf()</code></td>
             <td>Battese-Harter-Fuller (unit-level)</td>
             <td>PBMSE</td>
           </tr>
         </table>
       </section>
 
-      <!-- eblup_area Section -->
-      <section id="eblup_area" class="content-section">
-        <h2>eblup_area — Fay-Herriot</h2>
+      <!-- eblup_fh Section -->
+      <section id="eblup_fh" class="content-section">
+        <h2>eblup_fh — Fay-Herriot</h2>
         <pre><code>library(fastsae)
 
-m1 <- eblup_area(
+m1 <- eblup_fh(
   y ~ x1 + x2 + x3,
   data = mys,
   vardir = "vardir",
@@ -795,10 +806,10 @@ m1 <- eblup_area(
         </p>
       </section>
 
-      <!-- seblup_area Section -->
-      <section id="seblup_area" class="content-section">
-        <h2>seblup_area — Spatial Fay-Herriot</h2>
-        <pre><code>m2 <- seblup_area(
+      <!-- eblup_sfh Section -->
+      <section id="eblup_sfh" class="content-section">
+        <h2>eblup_sfh — Spatial Fay-Herriot</h2>
+        <pre><code>m2 <- eblup_sfh(
   y ~ x1 + x2 + x3,
   data = mys,
   vardir = "vardir",
@@ -807,7 +818,7 @@ m1 <- eblup_area(
 )</code></pre>
 
         <p>Parametric Bootstrap MSE:</p>
-        <pre><code>m3 <- seblup_area(
+        <pre><code>m3 <- eblup_sfh(
   y ~ x1 + x2 + x3,
   data = mys,
   vardir = "vardir",
@@ -820,9 +831,31 @@ m1 <- eblup_area(
 )</code></pre>
       </section>
 
-      <!-- eblup_unit Section -->
-      <section id="eblup_unit" class="content-section">
-        <h2>eblup_unit — Battese-Harter-Fuller</h2>
+            <!-- eblup_stfh Section -->
+      <section id="eblup_stfh" class="content-section">
+        <h2>eblup_stfh — Spatio Temporal Fay-Herriot</h2>
+        <pre><code>library(dplyr)
+
+mys_panel_nona <- mys_panel |>
+  filter(!is.na(y))
+mys_proxmat_nona <- mys_proxmat[-c(21, 25), -c(21, 25)]
+
+
+fit_fast <- eblup_stfh(
+  y ~ x1 + x2 + x3,
+  data = mys_panel_nona,
+  vardir = ~vardir,
+  domain = ~area,
+  time = ~year,
+  W = mys_proxmat_nona,
+  model = "ST",
+  print_result = FALSE
+)</code></pre>
+      </section>
+
+      <!-- eblup_bhf Section -->
+      <section id="eblup_bhf" class="content-section">
+        <h2>eblup_bhf — Battese-Harter-Fuller</h2>
         <pre><code>library(dplyr)
 
 # Prepare data
@@ -831,7 +864,7 @@ df_meanpop <- cornsoybeanmeans |>
 df_cornsoybean <- cornsoybean |>
   rename(CountyIndex = County)
 
-m3 <- eblup_unit(
+m3 <- eblup_bhf(
   formula = CornHec ~ CornPix + SoyBeansPix,
   unit_data = df_cornsoybean,
   Xpop = df_meanpop,
@@ -1235,7 +1268,7 @@ m3 <- eblup_unit(
             }
 
             // If in models section, expand and highlight parent
-            if (['models', 'eblup_area', 'seblup_area', 'eblup_unit'].includes(id)) {
+            if (['models', 'eblup_fh', 'eblup_sfh', 'eblup_bhf'].includes(id)) {
               modelsToggle.classList.add('active', 'expanded');
               modelsSubmenu.classList.add('expanded');
             }
@@ -1255,7 +1288,7 @@ m3 <- eblup_unit(
 
           // If in models section, highlight parent
           const section = item.dataset.section;
-          if (['models', 'eblup_area', 'seblup_area', 'eblup_unit'].includes(section)) {
+          if (['models', 'eblup_fh', 'eblup_sfh', 'eblup_bhf'].includes(section)) {
             modelsToggle.classList.add('active');
           }
         });
