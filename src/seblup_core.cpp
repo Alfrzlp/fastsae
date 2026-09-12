@@ -617,13 +617,14 @@ List seblup_core(
   );
 
   List out = List::create(
-    _["sigma2_u"]    = sigma2,
-    _["rho"]         = rho_fix,
     _["estcoef"]     = df_coef,
     _["df_eblup"]    = df_eblup,
+    _["sigma2_u"]    = sigma2,
+    _["rho"]         = rho_fix,
     _["goodness"]    = goodness,
     _["n_iter"]      = k,
     _["convergence"] = (k < maxiter),
+
     _["beta"]        = beta,
     _["Xbeta"]       = Xbeta,
     _["theta"]       = eblup,

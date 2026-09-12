@@ -61,7 +61,7 @@
 #' library(fastsae)
 #'
 #' # Spatial Fay-Herriot model
-#' m1 <- seblup_area(
+#' m1 <- eblup_sfh(
 #'   y ~ x1 + x2 + x3,
 #'   data = mys,
 #'   vardir = ~vardir,
@@ -69,7 +69,7 @@
 #' )
 #'
 #' # Spatial Fay-Herriot model with Parametric Bootstrap MSE
-#' m2 <- seblup_area(
+#' m2 <- eblup_sfh(
 #'   y ~ x1 + x2 + x3,
 #'   data = mys,
 #'   vardir = ~vardir,
@@ -79,7 +79,7 @@
 #' )
 #'
 #' @md
-seblup_area <- function(
+eblup_sfh <- function(
     formula,
     vardir,
     data,

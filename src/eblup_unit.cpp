@@ -5,8 +5,8 @@
 #include <vector>
 using namespace Rcpp;
 
-// [[Rcpp::export(.eblup_unit_cpp)]]
-List eblup_unit_cpp(
+// [[Rcpp::export(.eblup_bhf_cpp)]]
+List eblup_bhf_cpp(
     CharacterVector selectdom,
     CharacterVector dom,
     NumericMatrix Xs,

@@ -1,13 +1,11 @@
-// src/steblup_core.cpp
+// src/eblup_stfh_core.cpp
 // Core Spatio-Temporal Fay-Herriot EBLUP estimation (Fisher-scoring, REML-style)
 //
 // Optimized version - Key optimizations:
-//  1. trace(PV) computed via sum(P % Va) WITHOUT forming PV = P*Va
-//  2. trPVPV(i,j) = sum(PV[i] % PV[j].t()) using element-wise operations
-//     on-the-fly without storing PV matrices
-//  3. Uses Cholesky decomposition for better numerical stability
-//  4. Avoids redundant matrix allocations
-//  5. Woodbury identity for invV without explicit MxM matrix formation
+//  1. Pre-compute WtW and WpWt outside the iteration loop
+//  2. Pre-compute OnesT matrix for Kronecker products
+//  3. Use inv_sympd for better numerical stability
+//  4. Handle sigma21=0 case properly (zero Vu1 matrix)
 //
 #include <RcppArmadillo.h>
 #include <Rcpp.h>
@@ -26,26 +24,25 @@ static void build_omega2(int Tt, double rho2, arma::mat& Omega2, arma::mat& dOme
   Omega2.zeros(Tt, Tt);
   dOmega2.zeros(Tt, Tt);
   const double one_m_rho2sq = 1.0 - rho2 * rho2;
-  const double inv_one_m_rho2sq = 1.0 / one_m_rho2sq;
-  const double diag_val = inv_one_m_rho2sq;
-  const double diag_deriv = 2.0 * rho2 * inv_one_m_rho2sq * inv_one_m_rho2sq;
 
   for (int i = 0; i < Tt; ++i) {
-    Omega2(i, i) = diag_val;
-    dOmega2(i, i) = diag_deriv;
     for (int j = 0; j < i; ++j) {
       const int lag = i - j;
       const double rho_lag = std::pow(rho2, (double) lag);
-      const double val = rho_lag * inv_one_m_rho2sq;
+      const double val = rho_lag / one_m_rho2sq;
       Omega2(i, j) = val;
       Omega2(j, i) = val;
 
       const double raw_deriv = (double) lag * std::pow(rho2, (double)(lag - 1));
-      const double dval = (raw_deriv + 2.0 * rho2 * rho_lag) * inv_one_m_rho2sq * inv_one_m_rho2sq;
+      const double dval = raw_deriv / one_m_rho2sq + (2.0 * rho2 / one_m_rho2sq) * val;
       dOmega2(i, j) = dval;
       dOmega2(j, i) = dval;
     }
   }
+  // Diagonal (lag = 0): rho2^0 / (1-rho2^2) = 1/(1-rho2^2)
+  Omega2.diag().fill(1.0 / one_m_rho2sq);
+  // Turunan diagonal: d/drho2 [1/(1-rho2^2)] = 2*rho2 / (1-rho2^2)^2.
+  dOmega2.diag().fill(2.0 * rho2 / (one_m_rho2sq * one_m_rho2sq));
 }
 
 // ============================================================================
@@ -57,13 +54,13 @@ struct ModelPieces {
   bool ok = true;
   bool hasVu1 = true;
   arma::mat Omega1;      // D x D
-  arma::mat Vu1;         // D x D
-  arma::mat invVu1;      // D x D
-  arma::mat invA;        // M x M, block diagonal per domain
-  arma::vec diagC;       // D x 1
-  double logdetA = 0.0;
-  arma::mat Omega2;      // T x T (ST only)
-  arma::mat dOmega2;     // T x T (ST only)
+  arma::mat Vu1;         // D x D (zero when sigma21 == 0)
+  arma::mat invVu1;      // D x D (not computed when sigma21 == 0)
+  arma::mat invA;        // M x M, blok diagonal per domain
+  arma::vec diagC;       // D x 1, diag(Z1' invA Z1)
+  double logdetA = 0.0;  // log det dari matriks blok-diagonal A (= invA^-1)
+  arma::mat Omega2;      // T x T (ST saja)
+  arma::mat dOmega2;     // T x T (ST saja)
 };
 
 static ModelPieces compute_pieces(
@@ -74,7 +71,6 @@ static ModelPieces compute_pieces(
   ModelPieces mp;
   const int M = D * Tt;
 
-  // Compute Omega1 = inv((I - rho1*W)'*(I - rho1*W))
   arma::mat ImrW = Id - rho1 * W;
   arma::mat A1 = ImrW.t() * ImrW;
   bool ok1 = arma::inv_sympd(mp.Omega1, A1);
@@ -128,7 +124,18 @@ static ModelPieces compute_pieces(
   return mp;
 }
 
-// invV = invA - invAZ1 * Cinv * invAZ1'  (Woodbury identity)
+// Z1' invA (M x D)
+static arma::mat build_invAZ1(const arma::mat& invA, int D, int Tt) {
+  const int M = D * Tt;
+  arma::mat invAZ1(M, D, fill::zeros);
+  for (int d = 0; d < D; ++d) {
+    const int first = d * Tt, last = first + Tt - 1;
+    invAZ1.submat(first, d, last, d) = arma::sum(invA.submat(first, first, last, last), 1);
+  }
+  return invAZ1;
+}
+
+// invV via Woodbury identity
 static bool build_invV(const ModelPieces& mp, const arma::mat& invAZ1, int D,
                        arma::mat& invV_out, arma::mat& Cmat_out) {
   if (!mp.hasVu1) {
@@ -146,48 +153,12 @@ static bool build_invV(const ModelPieces& mp, const arma::mat& invAZ1, int D,
 }
 
 // ============================================================================
-// Optimized Fisher scoring iteration
+// .eblup_stfh_core()
 //
-// Key insight: We need trace(P*Va[i]) and sum(PVa[i] % PVa[j].t())
-// where PVa[i] = P * Va[i].
-//
-// For efficiency:
-// - trace(P*Va) = sum(P % Va)  when P is symmetric
-// - For Va = kron(A, ones(T,T)), trace(P*Va) = sum(sum(P) per block row/col)
-// - For Va = kron(I_D, B), trace(P*Va) = trace of block diagonal parts
+// Output structure matching seblup_area + estvarcomp for spatio-temporal
 // ============================================================================
-
-// Compute diagC from invA: diagC(d) = sum of row sums of block d
-static arma::vec compute_diagC_from_invA(const arma::mat& invA, int D, int Tt) {
-  arma::vec diagC(D);
-  for (int d = 0; d < D; ++d) {
-    const int first = d * Tt;
-    const int last = first + Tt - 1;
-    diagC(d) = arma::sum(arma::sum(invA.submat(first, first, last, last)));
-  }
-  return diagC;
-}
-
-// Compute invAZ1 = invA * Z1 (Z1 is DxD block indicator)
-// invAZ1(i,d) = sum of row i in block d = row sum of invA block
-static arma::mat build_invAZ1(const arma::mat& invA, int D, int Tt) {
-  const int M = D * Tt;
-  arma::mat invAZ1(M, D, fill::zeros);
-  for (int d = 0; d < D; ++d) {
-    const int first = d * Tt, last = first + Tt - 1;
-    // Row sums of block d
-    invAZ1.submat(first, d, last, d) = arma::sum(invA.submat(first, first, last, last), 1);
-  }
-  return invAZ1;
-}
-
-// ============================================================================
-// .steblup_core()
-//
-// OPTIMIZED VERSION
-// ============================================================================
-// [[Rcpp::export(.steblup_core)]]
-List steblup_core(
+// [[Rcpp::export(.eblup_stfh_core)]]
+List eblup_stfh_core(
     const arma::mat& X,
     const arma::vec& y,
     const arma::vec& vardir,
@@ -221,7 +192,6 @@ List steblup_core(
   const bool isST = (model == "ST");
   const int nparam = isST ? 4 : 3;
 
-  // Pre-compute constant matrices
   const arma::mat Id = arma::eye<arma::mat>(D, D);
   const arma::mat& W = proxmat;
   const arma::mat Wt = W.t();
@@ -229,59 +199,36 @@ List steblup_core(
   const arma::mat WpWt = W + Wt;
   const arma::mat EyeD = arma::eye<arma::mat>(D, D);
   const arma::mat tX = X.t();
+  const arma::mat OnesT = arma::ones<arma::mat>(Tt, Tt);
 
   CharacterVector thetanames = isST
   ? CharacterVector::create("sigma21", "rho1", "sigma22", "rho2")
     : CharacterVector::create("sigma21", "rho1", "sigma22");
 
-  // Starting values
   arma::vec thetak(nparam), thetak1(nparam);
   thetak1(0) = sigma21_start;
   thetak1(1) = rho1_start;
   thetak1(2) = sigma22_start;
   if (isST) thetak1(3) = rho2_start;
 
-  // Working matrices
   arma::vec S(nparam, fill::zeros);
   arma::mat F(nparam, nparam, fill::zeros);
   arma::mat Finv(nparam, nparam, fill::zeros);
 
   int k = 0;
   double diff = precision + 1.0;
-  bool convergence = true;
 
   auto make_fail_result = [&](bool conv) -> List {
     return List::create(
-      _["eblup"] = R_NilValue,
-      _["fit"] = List::create(
-        _["model"] = model,
-        _["convergence"] = conv,
-        _["iterations"] = k,
-        _["estcoef"] = R_NilValue,
-        _["estvarcomp"] = R_NilValue,
-        _["goodness"] = R_NilValue
-      )
+      _["estcoef"] = R_NilValue,
+      _["estvarcomp"] = R_NilValue,
+      _["goodness"] = R_NilValue,
+      _["df_eblup"] = R_NilValue,
+      _["model"] = model,
+      _["convergence"] = conv,
+      _["n_iter"] = k
     );
   };
-
-  // Pre-allocate matrices used in iteration
-  arma::mat invAZ1(M, D);
-  arma::mat invV(M, M);
-  arma::mat Cmat(D, D);
-  arma::mat tXinvV(p, M);
-  arma::mat tXinvVX(p, p);
-  arma::mat Q(p, p);
-  arma::mat P(M, M);
-  arma::vec Py(M);
-  arma::mat derivrho1(D, D);
-  arma::mat sigmaOmegaderivrho1Omega(D, D);
-
-  // Pre-allocate Va matrices (will be reused each iteration)
-  std::vector<arma::mat> Va(nparam);
-  // Va[0], Va[1], Va[2], Va[3] - MxM Kronecker products
-  for (int i = 0; i < nparam; ++i) {
-    Va[i].zeros(M, M);
-  }
 
   while (diff > precision && k < maxiter) {
     ++k;
@@ -296,92 +243,55 @@ List steblup_core(
                                     isST, D, Tt, Id, W, vardir);
     if (!mp.ok) return make_fail_result(false);
 
-    // invAZ1
-    invAZ1 = build_invAZ1(mp.invA, D, Tt);
-
-    // invV via Woodbury
+    arma::mat invAZ1 = build_invAZ1(mp.invA, D, Tt);
+    arma::mat invV, Cmat;
     if (!build_invV(mp, invAZ1, D, invV, Cmat)) return make_fail_result(false);
 
-    // P = invV - tXinvV.t() * Q * tXinvV
-    tXinvV = tX * invV;
-    tXinvVX = tXinvV * X;
+    arma::mat tXinvV = tX * invV;
+    arma::mat tXinvVX = tXinvV * X;
+    arma::mat Q;
     bool okQ = arma::inv_sympd(Q, tXinvVX);
     if (!okQ) okQ = arma::inv(Q, tXinvVX);
     if (!okQ) return make_fail_result(false);
 
-    P = invV - tXinvV.t() * Q * tXinvV;
-    Py = P * y;
+    arma::mat P = invV - tXinvV.t() * Q * tXinvV;
+    arma::vec Py = P * y;
 
     // Derivative of spatial model
-    derivrho1 = -WpWt + 2.0 * rho1_k * WtW;
-    sigmaOmegaderivrho1Omega = (-sigma21_k) * (mp.Omega1 * derivrho1 * mp.Omega1);
+    arma::mat derivrho1 = -WpWt + 2.0 * rho1_k * WtW;
+    arma::mat sigmaOmegaderivrho1Omega = (-sigma21_k) * (mp.Omega1 * derivrho1 * mp.Omega1);
 
-    // Build Va matrices (Kronecker products)
-    // Va[0] = kron(Omega1, 1_T*1_T')
-    // Va[1] = kron(sigmaOmegaderivrho1Omega, 1_T*1_T')
-    // Va[2] = kron(I_D, Omega2) or I_M
-    // Va[3] = kron(I_D, sigma22*dOmega2)
-    arma::mat onesTT = arma::ones<arma::mat>(Tt, Tt);
-
-    Va[0] = arma::kron(mp.Omega1, onesTT);
-    Va[1] = arma::kron(sigmaOmegaderivrho1Omega, onesTT);
+    // Va matrices (Kronecker products)
+    std::vector<arma::mat> Va(nparam);
+    Va[0] = arma::kron(mp.Omega1, OnesT);
+    Va[1] = arma::kron(sigmaOmegaderivrho1Omega, OnesT);
     if (!isST) {
       Va[2] = arma::eye<arma::mat>(M, M);
     } else {
       Va[2] = arma::kron(EyeD, mp.Omega2);
-      Va[3] = arma::kron(EyeD, sigma22_k * mp.dOmega2);
+      arma::mat sigma22dOmega2 = sigma22_k * mp.dOmega2;
+      Va[3] = arma::kron(EyeD, sigma22dOmega2);
     }
 
-    // ========================================================================
-    // OPTIMIZED: Compute trace and Fisher information without storing PV matrices
-    // ========================================================================
-    // For symmetric P: trace(P*Va) = sum(P % Va)  [element-wise]
-    // For trPVPV(i,j): sum(PVa[i] % PVa[j].t()) = trace(PVa[i]*PVa[j]^T)
-    //   = trace(P*Va[i]*Va[j]*P) = sum(P % (Va[i]*Va[j]))
-    // BUT Va[i]*Va[j] is another MxM matrix...
-    //
-    // Alternative: compute PVa[i] on-the-fly and accumulate trPV and trPVPV
-    // without storing the full matrices.
-    //
-    // Even better: for our specific Va structure (Kronecker products),
-    // we can compute traces efficiently.
-    // ========================================================================
-
-    // Compute trPV = trace(P*Va[i]) for each i
-    // Using: trace(P*Va) = sum(P % Va) when P and Va are symmetric
-    // Note: P is symmetric (projection matrix), Va[i] is symmetric
+    // PV matrices and traces
+    std::vector<arma::mat> PV(nparam);
     arma::vec trPV(nparam);
     for (int i = 0; i < nparam; ++i) {
-      trPV(i) = arma::accu(P % Va[i]);
-    }
-
-    // Compute trPVPV matrix
-    // trPVPV(i,j) = trace(P*Va[i]*P*Va[j]) = sum(PVa[i] % PVa[j].t())
-    // Using trace cyclic property: trace(P*Va[i]*P*Va[j]) = trace(P*Va[i]*P*Va[j])
-    //
-    // For efficiency, we compute PVa[i] = P*Va[i] on-the-fly and accumulate
-    // trPVPV incrementally
-
-    arma::mat trPVPV(nparam, nparam, fill::zeros);
-
-    // Pre-compute blocks of P for efficiency (since Va has block structure)
-    // P is MxM with no special structure, so we need the full multiplication
-    std::vector<arma::mat> PV(nparam);
-    for (int i = 0; i < nparam; ++i) {
       PV[i] = P * Va[i];
+      trPV(i) = arma::trace(PV[i]);
     }
 
-    // trPVPV(i,j) = sum(PV[i] % PV[j].t()) = trace(PV[i]*PV[j]^T)
+    // Fisher information matrix
+    arma::mat trPVPV(nparam, nparam, fill::zeros);
     for (int i = 0; i < nparam; ++i) {
-      trPVPV(i, i) = arma::accu(PV[i] % PV[i].t());
-      for (int j = i + 1; j < nparam; ++j) {
-        double tv = arma::accu(PV[i] % PV[j].t());
+      for (int j = i; j < nparam; ++j) {
+        const double tv = arma::accu(PV[i] % PV[j].t());
         trPVPV(i, j) = tv;
         trPVPV(j, i) = tv;
       }
     }
 
-    // Score vector S and Fisher matrix F
+    // Score vector and Fisher matrix
     for (int a = 0; a < nparam; ++a) {
       const double quad = arma::as_scalar(Py.t() * Va[a] * Py);
       S(a) = -0.5 * trPV(a) + 0.5 * quad;
@@ -397,7 +307,7 @@ List steblup_core(
 
     thetak1 = thetak + Finv * S;
 
-    // Clamp parameters to valid ranges
+    // Clamp parameters
     if (thetak1(1) <= -1) thetak1(1) = -0.999;
     else if (thetak1(1) >= 1) thetak1(1) = 0.999;
     if (isST) {
@@ -438,15 +348,13 @@ List steblup_core(
       _["std.error"] = NumericVector(nparam, 0.0)
     );
     return List::create(
-      _["eblup"] = R_NilValue,
-      _["fit"] = List::create(
-        _["model"] = model,
-        _["convergence"] = convergence,
-        _["iterations"] = k,
-        _["estcoef"] = R_NilValue,
-        _["estvarcomp"] = estvarcomp,
-        _["goodness"] = R_NilValue
-      )
+      _["estcoef"] = R_NilValue,
+      _["estvarcomp"] = estvarcomp,
+      _["goodness"] = R_NilValue,
+      _["df_eblup"] = R_NilValue,
+      _["model"] = model,
+      _["convergence"] = true,
+      _["n_iter"] = k
     );
   }
 
@@ -458,20 +366,19 @@ List steblup_core(
       _["std.error"] = NumericVector(nparam, 0.0)
     );
     return List::create(
-      _["eblup"] = R_NilValue,
-      _["fit"] = List::create(
-        _["model"] = model,
-        _["convergence"] = false,
-        _["iterations"] = k,
-        _["estcoef"] = R_NilValue,
-        _["estvarcomp"] = estvarcomp,
-        _["goodness"] = R_NilValue
-      )
+      _["estcoef"] = R_NilValue,
+      _["estvarcomp"] = estvarcomp,
+      _["goodness"] = R_NilValue,
+      _["df_eblup"] = R_NilValue,
+      _["model"] = model,
+      _["convergence"] = false,
+      _["n_iter"] = k
     );
   }
 
   bool haveVu1 = (sigma21_f != 0.0);
   arma::mat invAZ1f = build_invAZ1(mpf.invA, D, Tt);
+  arma::mat invV, Cmat;
   if (haveVu1) {
     if (!build_invV(mpf, invAZ1f, D, invV, Cmat)) {
       DataFrame estvarcomp = DataFrame::create(
@@ -479,23 +386,23 @@ List steblup_core(
         _["std.error"] = NumericVector(nparam, 0.0)
       );
       return List::create(
-        _["eblup"] = R_NilValue,
-        _["fit"] = List::create(
-          _["model"] = model,
-          _["convergence"] = false,
-          _["iterations"] = k,
-          _["estcoef"] = R_NilValue,
-          _["estvarcomp"] = estvarcomp,
-          _["goodness"] = R_NilValue
-        )
+        _["estcoef"] = R_NilValue,
+        _["estvarcomp"] = estvarcomp,
+        _["goodness"] = R_NilValue,
+        _["df_eblup"] = R_NilValue,
+        _["model"] = model,
+        _["convergence"] = false,
+        _["n_iter"] = k
       );
     }
   } else {
     invV = mpf.invA;
   }
 
-  tXinvV = tX * invV;
-  tXinvVX = tXinvV * X;
+  // Beta and residuals
+  arma::mat tXinvV = tX * invV;
+  arma::mat tXinvVX = tXinvV * X;
+  arma::mat Q;
   bool okQ = arma::inv_sympd(Q, tXinvVX);
   if (!okQ) okQ = arma::inv(Q, tXinvVX);
   if (!okQ) return make_fail_result(false);
@@ -504,7 +411,7 @@ List steblup_core(
   arma::vec resid = y - X * beta;
   arma::vec invVresid = invV * resid;
 
-  // u1 (spatial random effects)
+  // Random effects
   arma::vec tZ1invVresid(D, fill::zeros);
   for (int d = 0; d < D; ++d) {
     const int first = d * Tt, last = first + Tt - 1;
@@ -517,7 +424,6 @@ List steblup_core(
     u1dt.subvec(first, last).fill(u1est(d));
   }
 
-  // u2 (temporal random effects)
   arma::vec u2dt(M);
   if (!isST) {
     u2dt = sigma22_f * invVresid;
@@ -579,15 +485,13 @@ List steblup_core(
       _["std.error"] = NumericVector(nparam, 0.0)
     );
     return List::create(
-      _["eblup"] = R_NilValue,
-      _["fit"] = List::create(
-        _["model"] = model,
-        _["convergence"] = false,
-        _["iterations"] = k,
-        _["estcoef"] = R_NilValue,
-        _["estvarcomp"] = estvarcomp,
-        _["goodness"] = R_NilValue
-      )
+      _["estcoef"] = R_NilValue,
+      _["estvarcomp"] = estvarcomp,
+      _["goodness"] = R_NilValue,
+      _["df_eblup"] = R_NilValue,
+      _["model"] = model,
+      _["convergence"] = false,
+      _["n_iter"] = k
     );
   }
   arma::vec stderr_theta = arma::sqrt(diagFinv);
@@ -597,17 +501,21 @@ List steblup_core(
     _["std.error"] = NumericVector(stderr_theta.begin(), stderr_theta.end())
   );
 
-  List fit = List::create(
-    _["model"] = model,
-    _["convergence"] = true,
-    _["iterations"] = k,
-    _["estcoef"] = estcoef,
-    _["estvarcomp"] = estvarcomp,
-    _["goodness"] = goodness
+  // df_eblup with random effects
+  DataFrame df_eblup = DataFrame::create(
+    _["eblup"] = NumericVector(eblup.begin(), eblup.end()),
+    _["random_effect_u1"] = NumericVector(u1dt.begin(), u1dt.end()),
+    _["random_effect_u2"] = NumericVector(u2dt.begin(), u2dt.end())
   );
 
+  // Return structure matching seblup_area + estvarcomp
   return List::create(
-    _["eblup"] = NumericVector(eblup.begin(), eblup.end()),
-    _["fit"] = fit
+    _["estcoef"] = estcoef,
+    _["estvarcomp"] = estvarcomp,
+    _["goodness"] = goodness,
+    _["df_eblup"] = df_eblup,
+    _["model"] = model,
+    _["convergence"] = true,
+    _["n_iter"] = k
   );
 }

@@ -32,7 +32,7 @@
 #' df_cornsoybean <- cornsoybean |>
 #'   rename(CountyIndex = County)
 #'
-#' res <- eblup_unit(
+#' res <- eblup_bhf(
 #'   formula = CornHec ~ CornPix + SoyBeansPix,
 #'   Xpop = df_meanpop,
 #'   unit_data = df_cornsoybean,
@@ -41,7 +41,7 @@
 #' )
 #' }
 #' @export
-eblup_unit <- function(
+eblup_bhf <- function(
   formula,
   unit_data,
   Xpop,
@@ -88,7 +88,7 @@ eblup_unit <- function(
   sigma2_e <- attr(lme4::VarCorr(fit), "sc")^2
 
   # --- compute EBLUP ---
-  result <- .eblup_unit_cpp(
+  result <- .eblup_bhf_cpp(
     selectdom = selectdom,
     dom = dom,
     Xs = Xs,
@@ -167,7 +167,7 @@ eblup_unit <- function(
 # ============================================================================
 # Parametric Bootstrap MSE for Unit-level Model
 # ============================================================================
-#' @rdname eblup_unit
+#' @rdname eblup_bhf
 #' @export
 pbmse_unit <- function(
   formula,
@@ -207,7 +207,7 @@ pbmse_unit <- function(
   sigma2_e <- attr(lme4::VarCorr(fit), "sc")^2
 
   # --- initial EBLUP ---
-  init_result <- .eblup_unit_cpp(
+  init_result <- .eblup_bhf_cpp(
     selectdom = selectdom,
     dom = dom,
     Xs = Xs,
@@ -254,7 +254,7 @@ pbmse_unit <- function(
     upred_boot <- lme4::ranef(fit_boot)$dom
 
     # Compute bootstrap EBLUP
-    eblup_boot <- .eblup_unit_cpp(
+    eblup_boot <- .eblup_bhf_cpp(
       selectdom = selectdom,
       dom = dom,
       Xs = Xs,

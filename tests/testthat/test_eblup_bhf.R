@@ -43,7 +43,7 @@ Xpop <- merge(Xmean, Popn, by = "CountyIndex")
 # ============================================================================
 # Fit using fastsae
 # ============================================================================
-fit_fast <- eblup_unit(
+fit_fast <- eblup_bhf(
   formula = CornHec ~ CornPix + SoyBeansPix,
   unit_data = df_cornsoybean,
   Xpop = Xpop,
@@ -81,7 +81,7 @@ tol <- 1e-4
 # ============================================================================
 # Tests: EBLUP
 # ============================================================================
-test_that("eblup_unit returns valid structure", {
+test_that("eblup_bhf returns valid structure", {
   expect_s3_class(fit_fast, "fastsae_unit")
   expect_true("eblup" %in% names(fit_fast))
   expect_true("fit" %in% names(fit_fast))
@@ -173,7 +173,7 @@ test_that("pbmse_unit produces valid MSE estimates", {
 # ============================================================================
 test_that("Invalid method throws error", {
   expect_error(
-    eblup_unit(
+    eblup_bhf(
       formula = CornHec ~ CornPix + SoyBeansPix,
       unit_data = df_cornsoybean,
       Xpop = Xpop,

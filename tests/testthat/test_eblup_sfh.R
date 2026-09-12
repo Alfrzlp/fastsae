@@ -7,33 +7,39 @@ skip_if_not_installed("sae")
 # Shared objects
 # ------------------------------------------------------------------
 
-mysnona <- mys[!is.na(mys$y), ]
+idx <- !is.na(mys$y)
 
-fit_fast <- eblup_area(
+mysnona <- mys[idx, ]
+mys_proxmat_nona <- mys_proxmat[idx, idx]
+
+fit_fast <- eblup_sfh(
   y ~ x1 + x2 + x3,
   vardir = "vardir",
   method = "REML",
   data = mysnona,
+  W = mys_proxmat_nona,
   print_result = FALSE
 )
 
-fit_sae <- sae::mseFH(
+fit_sae <- sae::mseSFH(
   mysnona$y ~ mysnona$x1 + mysnona$x2 + mysnona$x3,
   vardir = mysnona$vardir,
+  proxmat = mys_proxmat_nona,
   method = "REML"
 )
 
-tol <- 1e-5
+tol <- 1e-6
 
-# ------------------------------------------------------------------
+
+# -----------------------------------------------------------------
 # Structure
 # ------------------------------------------------------------------
 
-test_that("eblup_area returns valid structure", {
+test_that("eblup_sfh returns valid structure", {
   expect_true(is.list(fit_fast))
 
   expect_true("df_eblup" %in% names(fit_fast))
-  expect_true("random_effect_var" %in% names(fit_fast))
+  expect_true("sigma2_u" %in% names(fit_fast))
   expect_true("estcoef" %in% names(fit_fast))
 
   expect_length(
@@ -51,7 +57,7 @@ test_that("eblup_area returns valid structure", {
 # EBLUP
 # ------------------------------------------------------------------
 
-test_that("EBLUP agrees with sae::mseFH", {
+test_that("EBLUP agrees with sae::mseSFH", {
   expect_equal(
     fit_fast$df_eblup$eblup,
     as.numeric(fit_sae$est$eblup),
@@ -63,7 +69,7 @@ test_that("EBLUP agrees with sae::mseFH", {
 # MSE
 # ------------------------------------------------------------------
 
-test_that("MSE agrees with sae::mseFH", {
+test_that("MSE agrees with sae::mseSFH", {
   expect_equal(
     fit_fast$df_eblup$mse,
     fit_sae$mse,
@@ -72,12 +78,12 @@ test_that("MSE agrees with sae::mseFH", {
 })
 
 # ------------------------------------------------------------------
-# Random effect variance
+# Variance component
 # ------------------------------------------------------------------
 
-test_that("random effect variance agrees with sae::mseFH", {
+test_that("random effect variance agrees with sae::mseSFH", {
   expect_equal(
-    fit_fast$random_effect_var,
+    fit_fast$sigma2_u,
     fit_sae$est$fit$refvar,
     tolerance = tol
   )
@@ -87,7 +93,7 @@ test_that("random effect variance agrees with sae::mseFH", {
 # Goodness of fit
 # ------------------------------------------------------------------
 
-test_that("goodness statistics agree with sae::mseFH", {
+test_that("goodness statistics agree with sae::mseSFH", {
   expect_equal(
     as.numeric(fit_fast$goodness),
     as.numeric(fit_sae$est$fit$goodness[-4]),
@@ -96,16 +102,27 @@ test_that("goodness statistics agree with sae::mseFH", {
 })
 
 # ------------------------------------------------------------------
-# Regression coefficients and Standard errors
+# Regression coefficients
 # ------------------------------------------------------------------
 
-test_that("beta estimates agree with sae::mseFH", {
+test_that("beta estimates agree with sae::mseSFH", {
+  expect_identical(
+    names(fit_fast$estcoef$beta),
+    names(fit_sae$est$fit$estcoef$beta)
+  )
+
   expect_equal(
     fit_fast$estcoef$beta,
     fit_sae$est$fit$estcoef$beta,
     tolerance = tol
   )
+})
 
+# ------------------------------------------------------------------
+# Standard errors
+# ------------------------------------------------------------------
+
+test_that("beta standard errors agree with sae::mseSFH", {
   expect_equal(
     fit_fast$estcoef$stderr_beta,
     fit_sae$est$fit$estcoef$std.error,
@@ -113,38 +130,34 @@ test_that("beta estimates agree with sae::mseFH", {
   )
 })
 
-
 # ------------------------------------------------------------------
-# Input validation
+# Error handling
 # ------------------------------------------------------------------
 
-test_that("negative or zero vardir throws error", {
-  dat_bad <- mysnona
-  dat_bad$vardir[1] <- -1
-  dat_bad$vardir[2] <- 0
+test_that("non-square proximity matrix throws error", {
+  W_bad <- mys_proxmat_nona[-1, ]
 
   expect_error(
-    eblup_area(
+    eblup_sfh(
       y ~ x1 + x2 + x3,
       vardir = "vardir",
-      data = dat_bad,
+      data = mysnona,
+      W = W_bad,
       print_result = FALSE
     )
   )
 })
 
+test_that("negative sampling variance throws error", {
+  dat_bad <- mysnona
+  dat_bad$vardir[1] <- -1
 
-# ------------------------------------------------------------------
-# Method argument
-# ------------------------------------------------------------------
-
-test_that("invalid method throws error", {
   expect_error(
-    eblup_area(
+    eblup_sfh(
       y ~ x1 + x2 + x3,
       vardir = "vardir",
-      method = "INVALID",
-      data = mysnona,
+      data = dat_bad,
+      W = mys_proxmat_nona,
       print_result = FALSE
     )
   )

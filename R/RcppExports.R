@@ -5,8 +5,12 @@
     .Call(`_fastsae_eblup_core`, Xall, yall, vardirall, method, maxiter, precision)
 }
 
-.eblup_unit_cpp <- function(selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred) {
-    .Call(`_fastsae_eblup_unit_cpp`, selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred)
+.eblup_stfh_core <- function(X, y, vardir, proxmat, D, Tt, model = "ST", maxiter = 100L, precision = 1e-4, sigma21_start = -1.0, rho1_start = 0.5, sigma22_start = -1.0, rho2_start = 0.5) {
+    .Call(`_fastsae_eblup_stfh_core`, X, y, vardir, proxmat, D, Tt, model, maxiter, precision, sigma21_start, rho1_start, sigma22_start, rho2_start)
+}
+
+.eblup_bhf_cpp <- function(selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred) {
+    .Call(`_fastsae_eblup_bhf_cpp`, selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred)
 }
 
 .seblup_core <- function(Xall, yall, vardirall, Wall, method = "REML", maxiter = 100L, precision = 1e-4, only_core = FALSE) {
@@ -19,9 +23,5 @@
 
 .seblup_pbmse <- function(X, y, vardir, W, method = "REML", maxiter = 100L, precision = 1e-4, B = 100L, n_threads = 0L, seed = -1L) {
     .Call(`_fastsae_seblup_pbmse`, X, y, vardir, W, method, maxiter, precision, B, n_threads, seed)
-}
-
-.steblup_core <- function(X, y, vardir, proxmat, D, Tt, model = "ST", maxiter = 100L, precision = 1e-4, sigma21_start = -1.0, rho1_start = 0.5, sigma22_start = -1.0, rho2_start = 0.5) {
-    .Call(`_fastsae_steblup_core`, X, y, vardir, proxmat, D, Tt, model, maxiter, precision, sigma21_start, rho1_start, sigma22_start, rho2_start)
 }
 

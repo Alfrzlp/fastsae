@@ -31,14 +31,14 @@
 #' library(fastsae)
 #'
 #' # Standard Fay-Herriot model
-#' m1 <- eblup_area(
+#' m1 <- eblup_fh(
 #'   y ~ x1 + x2 + x3,
 #'   data = mys,
 #'   vardir = "vardir"
 #' )
 #'
 #' @md
-eblup_area <- function(
+eblup_fh <- function(
   formula,
   vardir,
   data,

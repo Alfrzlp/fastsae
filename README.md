@@ -18,8 +18,8 @@ are too slow.
 
 | Model | Description | MSE Estimation |
 |----|----|----|
-| Fay-Herriot (Area-level) | `eblup_area()` | Analytical |
-| Spatial Fay-Herriot | `seblup_area()` | Analytical, Parametric Bootstrap MSE, Non Parametric Bootstrap MSE (Bias Corrected & Non Bias Corrected) |
+| Fay-Herriot (Area-level) | `eblup_fh()` | Analytical |
+| Spatial Fay-Herriot | `seblup_fh()` | Analytical, Parametric Bootstrap MSE, Non Parametric Bootstrap MSE (Bias Corrected & Non Bias Corrected) |
 | Battese-Harter-Fuller (Unit-level) | `eblup_unit()` | Parametric Bootstrap MSE |
 
 ## Installation
@@ -47,7 +47,7 @@ library(fastsae)
 
 # Using sampled areas only
 mys_sampled <- mys[!is.na(mys$y), ]
-m1 <- eblup_area(
+m1 <- eblup_fh(
   y ~ x1 + x2 + x3,
   data = mys_sampled,
   vardir = "vardir",
@@ -62,7 +62,7 @@ m1 <- eblup_area(
 mys_sampled <- mys[!is.na(mys$y), ]
 W_sampled <- mys_proxmat[!is.na(mys$y), !is.na(mys$y)]
 
-m2 <- seblup_area(
+m2 <- seblup_fh(
   y ~ x1 + x2 + x3,
   data = mys_sampled,
   vardir = "vardir",
@@ -75,7 +75,7 @@ m2 <- seblup_area(
 
 ``` r
 # Parametric Bootstrap MSE
-m_pb <- seblup_area(
+m_pb <- seblup_fh(
   y ~ x1 + x2 + x3,
   data = mys_sampled,
   vardir = "vardir",
@@ -86,7 +86,7 @@ m_pb <- seblup_area(
 )
 
 # Nonparametric Bootstrap MSE
-m_npb <- seblup_area(
+m_npb <- seblup_fh(
   y ~ x1 + x2 + x3,
   data = mys_sampled,
   vardir = "vardir",
@@ -103,7 +103,7 @@ fastsae supports multi-threaded bootstrap MSE estimation via OpenMP:
 
 ``` r
 # Use multiple threads for bootstrap
-m_parallel <- seblup_area(
+m_parallel <- seblup_fh(
   y ~ x1 + x2 + x3,
   data = mys_sampled,
   vardir = "vardir",

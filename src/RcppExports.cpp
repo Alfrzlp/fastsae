@@ -27,9 +27,32 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// eblup_unit_cpp
-List eblup_unit_cpp(CharacterVector selectdom, CharacterVector dom, NumericMatrix Xs, NumericMatrix meanxpop, NumericVector ys, NumericVector popnsize, NumericMatrix betaest, DataFrame upred);
-RcppExport SEXP _fastsae_eblup_unit_cpp(SEXP selectdomSEXP, SEXP domSEXP, SEXP XsSEXP, SEXP meanxpopSEXP, SEXP ysSEXP, SEXP popnsizeSEXP, SEXP betaestSEXP, SEXP upredSEXP) {
+// eblup_stfh_core
+List eblup_stfh_core(const arma::mat& X, const arma::vec& y, const arma::vec& vardir, const arma::mat& proxmat, int D, int Tt, std::string model, int maxiter, double precision, double sigma21_start, double rho1_start, double sigma22_start, double rho2_start);
+RcppExport SEXP _fastsae_eblup_stfh_core(SEXP XSEXP, SEXP ySEXP, SEXP vardirSEXP, SEXP proxmatSEXP, SEXP DSEXP, SEXP TtSEXP, SEXP modelSEXP, SEXP maxiterSEXP, SEXP precisionSEXP, SEXP sigma21_startSEXP, SEXP rho1_startSEXP, SEXP sigma22_startSEXP, SEXP rho2_startSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type vardir(vardirSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type proxmat(proxmatSEXP);
+    Rcpp::traits::input_parameter< int >::type D(DSEXP);
+    Rcpp::traits::input_parameter< int >::type Tt(TtSEXP);
+    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
+    Rcpp::traits::input_parameter< int >::type maxiter(maxiterSEXP);
+    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma21_start(sigma21_startSEXP);
+    Rcpp::traits::input_parameter< double >::type rho1_start(rho1_startSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma22_start(sigma22_startSEXP);
+    Rcpp::traits::input_parameter< double >::type rho2_start(rho2_startSEXP);
+    rcpp_result_gen = Rcpp::wrap(eblup_stfh_core(X, y, vardir, proxmat, D, Tt, model, maxiter, precision, sigma21_start, rho1_start, sigma22_start, rho2_start));
+    return rcpp_result_gen;
+END_RCPP
+}
+// eblup_bhf_cpp
+List eblup_bhf_cpp(CharacterVector selectdom, CharacterVector dom, NumericMatrix Xs, NumericMatrix meanxpop, NumericVector ys, NumericVector popnsize, NumericMatrix betaest, DataFrame upred);
+RcppExport SEXP _fastsae_eblup_bhf_cpp(SEXP selectdomSEXP, SEXP domSEXP, SEXP XsSEXP, SEXP meanxpopSEXP, SEXP ysSEXP, SEXP popnsizeSEXP, SEXP betaestSEXP, SEXP upredSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -41,7 +64,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type popnsize(popnsizeSEXP);
     Rcpp::traits::input_parameter< NumericMatrix >::type betaest(betaestSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type upred(upredSEXP);
-    rcpp_result_gen = Rcpp::wrap(eblup_unit_cpp(selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred));
+    rcpp_result_gen = Rcpp::wrap(eblup_bhf_cpp(selectdom, dom, Xs, meanxpop, ys, popnsize, betaest, upred));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -104,37 +127,14 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// steblup_core
-List steblup_core(const arma::mat& X, const arma::vec& y, const arma::vec& vardir, const arma::mat& proxmat, int D, int Tt, std::string model, int maxiter, double precision, double sigma21_start, double rho1_start, double sigma22_start, double rho2_start);
-RcppExport SEXP _fastsae_steblup_core(SEXP XSEXP, SEXP ySEXP, SEXP vardirSEXP, SEXP proxmatSEXP, SEXP DSEXP, SEXP TtSEXP, SEXP modelSEXP, SEXP maxiterSEXP, SEXP precisionSEXP, SEXP sigma21_startSEXP, SEXP rho1_startSEXP, SEXP sigma22_startSEXP, SEXP rho2_startSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type vardir(vardirSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type proxmat(proxmatSEXP);
-    Rcpp::traits::input_parameter< int >::type D(DSEXP);
-    Rcpp::traits::input_parameter< int >::type Tt(TtSEXP);
-    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
-    Rcpp::traits::input_parameter< int >::type maxiter(maxiterSEXP);
-    Rcpp::traits::input_parameter< double >::type precision(precisionSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma21_start(sigma21_startSEXP);
-    Rcpp::traits::input_parameter< double >::type rho1_start(rho1_startSEXP);
-    Rcpp::traits::input_parameter< double >::type sigma22_start(sigma22_startSEXP);
-    Rcpp::traits::input_parameter< double >::type rho2_start(rho2_startSEXP);
-    rcpp_result_gen = Rcpp::wrap(steblup_core(X, y, vardir, proxmat, D, Tt, model, maxiter, precision, sigma21_start, rho1_start, sigma22_start, rho2_start));
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_fastsae_eblup_core", (DL_FUNC) &_fastsae_eblup_core, 6},
-    {"_fastsae_eblup_unit_cpp", (DL_FUNC) &_fastsae_eblup_unit_cpp, 8},
+    {"_fastsae_eblup_stfh_core", (DL_FUNC) &_fastsae_eblup_stfh_core, 13},
+    {"_fastsae_eblup_bhf_cpp", (DL_FUNC) &_fastsae_eblup_bhf_cpp, 8},
     {"_fastsae_seblup_core", (DL_FUNC) &_fastsae_seblup_core, 8},
     {"_fastsae_seblup_npbmse", (DL_FUNC) &_fastsae_seblup_npbmse, 11},
     {"_fastsae_seblup_pbmse", (DL_FUNC) &_fastsae_seblup_pbmse, 10},
-    {"_fastsae_steblup_core", (DL_FUNC) &_fastsae_steblup_core, 13},
     {NULL, NULL, 0}
 };
 

@@ -59,7 +59,7 @@ for (s in seq_len(nsim)) {
 
   set.seed(seed_s)
   fit_fast_s <- tryCatch(
-    seblup_area(
+    eblup_sfh(
       y ~ x1 + x2 + x3,
       vardir = "vardir",
       method = "REML",
@@ -93,7 +93,7 @@ for (s in seq_len(nsim)) {
   # simpan hasil
   if (!is.null(fit_fast_s)) {
     eblup_fast[s, ] <- fit_fast_s$df_eblup$eblup
-    mse_fast[s, ] <- fit_fast_s$df_mse$mse_pbbc
+    mse_fast[s, ] <- fit_fast_s$df_eblup$mse_pbbc
   }
 
   if (!is.null(fit_emdi_s)) {
